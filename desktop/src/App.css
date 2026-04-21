@@ -1,0 +1,263 @@
+:root {
+  --bg: #1a1b1f;
+  --surface: #24262b;
+  --surface-hover: #2d2f36;
+  --border: #3a3d44;
+  --text: #e8e9ed;
+  --text-dim: #9ca0a8;
+  --accent: #5865f2;
+  --accent-hover: #4752c4;
+  --danger: #ed4245;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+}
+
+#root {
+  height: 100vh;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  width: 100%;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 14px;
+  margin: 0;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-dim);
+}
+
+/* Auth pages */
+.auth {
+  max-width: 360px;
+  margin: 0 auto;
+  padding: 80px 24px 24px;
+}
+
+.auth h1 {
+  text-align: center;
+  font-size: 32px;
+  margin: 0 0 8px;
+  color: var(--accent);
+}
+
+.auth h2 {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0 0 32px;
+  color: var(--text-dim);
+}
+
+.auth form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auth button {
+  margin-top: 8px;
+}
+
+.auth p {
+  text-align: center;
+  margin-top: 24px;
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+/* Rooms page */
+.rooms {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.rooms header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rooms header h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.rooms .user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rooms .user span {
+  color: var(--text-dim);
+}
+
+.rooms .user button {
+  background: transparent;
+  color: var(--text-dim);
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.rooms .user button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.create-room {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.create-room input {
+  flex: 1;
+}
+
+.room-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.room-list li:hover {
+  background: var(--surface-hover);
+}
+
+.room-list strong {
+  display: block;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+
+.room-list .members {
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.empty {
+  text-align: center;
+  color: var(--text-dim);
+  padding: 48px 0;
+}
+
+/* Room page */
+.room {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.room header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.room header button {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.room header button:hover {
+  color: var(--text);
+}
+
+.room header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.room code {
+  background: var(--surface);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.room .placeholder {
+  margin-top: 32px;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-style: italic;
+}

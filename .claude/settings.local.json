@@ -26,7 +26,14 @@
       "Bash(curl -s http://localhost:7880)",
       "Bash(curl -s -X POST http://localhost:3000/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"wendell\",\"email\":\"wendell@test.com\",\"password\":\"senha123\"}')",
       "Bash(python -m json.tool)",
-      "Bash(curl -s -X POST http://localhost:3000/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"wendell\",\"email\":\"wendell@test.com\",\"password\":\"senha123\"}')"
+      "Bash(curl -s -X POST http://localhost:3000/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"wendell\",\"email\":\"wendell@test.com\",\"password\":\"senha123\"}')",
+      "Bash(powershell -Command \"Get-Service Memurai* | Select-Object Name, Status, StartType\")",
+      "Read(//c/Program Files/Memurai//**)",
+      "Bash(\"/c/Program Files/Memurai/memurai-cli.exe\" ping)",
+      "Bash(\"/c/Program Files/Memurai/memurai-cli.exe\" INFO server)",
+      "Bash(npm create *)",
+      "Bash(npx tsc *)",
+      "Bash(curl -s http://localhost:1420/)"
     ]
   }
 }
