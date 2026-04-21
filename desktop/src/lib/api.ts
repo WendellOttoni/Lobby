@@ -34,12 +34,13 @@ async function request<T>(
   path: string,
   options: RequestInit & { token?: string } = {}
 ): Promise<T> {
-  const { token, headers, ...rest } = options;
+  const { token, headers, body, ...rest } = options;
 
   const response = await fetch(`${API_URL}${path}`, {
     ...rest,
+    body,
     headers: {
-      "Content-Type": "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },

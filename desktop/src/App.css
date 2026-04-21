@@ -349,6 +349,34 @@ a:hover {
   border: 1px solid var(--border);
 }
 
+.mic-level {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.mic-level > span {
+  min-width: 72px;
+}
+
+.mic-meter {
+  flex: 1;
+  height: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.mic-meter-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(to right, #3ba55d 0%, #3ba55d 70%, #edb242 85%, var(--danger) 100%);
+  transition: width 0.05s linear;
+}
+
 .room .controls .mic-toggle {
   width: 100%;
 }

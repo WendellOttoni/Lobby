@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ConnectionState,
-  LocalTrack,
+  LocalAudioTrack,
+  LocalTrackPublication,
   RemoteTrack,
   Room,
   RoomEvent,
@@ -10,6 +11,7 @@ import {
 } from "livekit-client";
 import { useAuth } from "../contexts/AuthContext";
 import { api } from "../lib/api";
+import { MicMeter } from "../components/MicMeter";
 
 interface ParticipantState {
   identity: string;
@@ -34,6 +36,9 @@ export function RoomPage() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [localMicTrack, setLocalMicTrack] = useState<MediaStreamTrack | null>(
+    null
+  );
 
   useEffect(() => {
     if (!roomId || !token) return;
@@ -85,8 +90,19 @@ export function RoomPage() {
       snapshot();
     }
 
-    function onLocalTrackPublished(pub: { track?: LocalTrack }) {
-      if (pub.track?.kind === Track.Kind.Audio) snapshot();
+    function onLocalTrackPublished(pub: LocalTrackPublication) {
+      if (pub.track?.kind === Track.Kind.Audio) {
+        const audio = pub.track as LocalAudioTrack;
+        setLocalMicTrack(audio.mediaStreamTrack);
+        snapshot();
+      }
+    }
+
+    function onLocalTrackUnpublished(pub: LocalTrackPublication) {
+      if (pub.track?.kind === Track.Kind.Audio) {
+        setLocalMicTrack(null);
+        snapshot();
+      }
     }
 
     room
@@ -98,6 +114,7 @@ export function RoomPage() {
       .on(RoomEvent.TrackUnmuted, snapshot)
       .on(RoomEvent.ActiveSpeakersChanged, snapshot)
       .on(RoomEvent.LocalTrackPublished, onLocalTrackPublished)
+      .on(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished)
       .on(RoomEvent.ConnectionStateChanged, (state) => {
         if (!cancelled) setConnectionState(state);
       });
@@ -211,6 +228,11 @@ export function RoomPage() {
       </section>
 
       <section className="controls">
+        <div className="mic-level">
+          <span>Nível do microfone</span>
+          <MicMeter track={localMicTrack} muted={isMicMuted} />
+        </div>
+
         <button
           onClick={toggleMute}
           className={`mic-toggle ${isMicMuted ? "muted" : ""}`}
