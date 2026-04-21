@@ -22,7 +22,7 @@ interface ParticipantState {
 }
 
 export function RoomPage() {
-  const { roomId } = useParams<{ roomId: string }>();
+  const { serverId, roomId } = useParams<{ serverId: string; roomId: string }>();
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -43,7 +43,7 @@ export function RoomPage() {
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!roomId || !token) return;
+    if (!roomId || !serverId || !token) return;
 
     let cancelled = false;
     setError(null);
@@ -131,7 +131,7 @@ export function RoomPage() {
 
     (async () => {
       try {
-        const { token: lkToken, url } = await api.getRoomToken(token, roomId);
+        const { token: lkToken, url } = await api.getRoomToken(token, serverId!, roomId);
         await room.connect(url, lkToken);
         if (cancelled) return;
 
@@ -176,7 +176,7 @@ export function RoomPage() {
       roomRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, token, reconnectKey]);
+  }, [roomId, serverId, token, reconnectKey]);
 
   async function toggleMute() {
     const room = roomRef.current;
@@ -230,7 +230,7 @@ export function RoomPage() {
   return (
     <main className="room">
       <header>
-        <button onClick={() => navigate("/rooms")}>← Sair</button>
+        <button onClick={() => navigate(`/servers/${serverId}`)}>← Sair</button>
         <h1>Sala</h1>
         <span className={`conn conn-${connectionState}`}>
           {connLabel[connectionState]}

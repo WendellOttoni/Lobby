@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
-import roomsRoutes from "./routes/rooms.js";
+import serversRoutes from "./routes/servers.js";
 
 const fastify = Fastify({
   logger: {
@@ -37,7 +37,7 @@ fastify.register(cors, {
 
 fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });
-fastify.register(roomsRoutes, { prefix: "/rooms" });
+fastify.register(serversRoutes, { prefix: "/servers" });
 
 fastify.get("/health", async () => ({ status: "ok" }));
 

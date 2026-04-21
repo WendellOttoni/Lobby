@@ -460,3 +460,241 @@ a:hover {
   text-align: center;
   padding: 24px 0;
 }
+
+/* ── Multi-tenant layout ── */
+
+.app-layout {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.server-sidebar {
+  width: 72px;
+  min-width: 72px;
+  background: #111215;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 10px 0;
+  gap: 6px;
+  overflow-y: auto;
+}
+
+.server-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: border-radius 0.15s, background 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.server-icon:hover:not(:disabled) {
+  background: var(--accent);
+  border-radius: 30%;
+}
+
+.server-icon.active {
+  background: var(--accent);
+  border-radius: 30%;
+}
+
+.server-icon.add-server {
+  background: transparent;
+  border: 2px dashed var(--border);
+  color: var(--text-dim);
+  font-size: 22px;
+  font-weight: 400;
+}
+
+.server-icon.add-server:hover:not(:disabled) {
+  border-color: #3ba55d;
+  color: #3ba55d;
+  background: transparent;
+}
+
+.sidebar-divider {
+  width: 32px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  margin: 4px 0;
+}
+
+.app-main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.no-servers {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-dim);
+}
+
+.server-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.server-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.server-page header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.server-page header h1 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.invite-box {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.invite-box code {
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 15px;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+
+.btn-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+
+.btn-danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.btn-danger-outline:hover:not(:disabled) {
+  background: rgba(237, 66, 69, 0.1);
+}
+
+/* Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  width: 380px;
+  max-width: 90vw;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.modal-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.choice-btn {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 15px;
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.choice-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--accent);
+}
+
+.choice-icon {
+  font-size: 22px;
+  width: 36px;
+  height: 36px;
+  background: var(--surface);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.modal form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}

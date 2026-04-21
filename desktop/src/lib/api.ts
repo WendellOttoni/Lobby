@@ -7,12 +7,26 @@ export interface User {
   createdAt: string;
 }
 
+export interface Server {
+  id: string;
+  name: string;
+  inviteCode: string;
+  ownerId: string;
+  role: string;
+  _count?: { members: number; rooms: number };
+}
+
+export interface ServerPreview {
+  id: string;
+  name: string;
+  _count: { members: number };
+}
+
 export interface Room {
   id: string;
   name: string;
   createdAt: string;
   onlineCount: number;
-  _count?: { members: number };
 }
 
 export interface AuthResponse {
@@ -76,18 +90,46 @@ export const api = {
   me: (token: string) =>
     request<{ user: User }>("/auth/me", { token }),
 
-  listRooms: (token: string) =>
-    request<{ rooms: Room[] }>("/rooms", { token }),
+  listServers: (token: string) =>
+    request<{ servers: Server[] }>("/servers", { token }),
 
-  createRoom: (token: string, name: string) =>
-    request<{ room: Room }>("/rooms", {
+  createServer: (token: string, name: string) =>
+    request<{ server: Server }>("/servers", {
       method: "POST",
       token,
       body: JSON.stringify({ name }),
     }),
 
-  getRoomToken: (token: string, roomId: string) =>
-    request<LivekitTokenResponse>(`/rooms/${roomId}/token`, {
+  getInvitePreview: (token: string, code: string) =>
+    request<{ server: ServerPreview }>(`/servers/invite/${code}`, { token }),
+
+  joinServer: (token: string, code: string) =>
+    request<{ server: Server }>(`/servers/invite/${code}/join`, {
+      method: "POST",
+      token,
+    }),
+
+  getServer: (token: string, serverId: string) =>
+    request<{ server: Server; role: string }>(`/servers/${serverId}`, { token }),
+
+  resetInvite: (token: string, serverId: string) =>
+    request<{ inviteCode: string }>(`/servers/${serverId}/invite/reset`, {
+      method: "POST",
+      token,
+    }),
+
+  listRooms: (token: string, serverId: string) =>
+    request<{ rooms: Room[] }>(`/servers/${serverId}/rooms`, { token }),
+
+  createRoom: (token: string, serverId: string, name: string) =>
+    request<{ room: Room }>(`/servers/${serverId}/rooms`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  getRoomToken: (token: string, serverId: string, roomId: string) =>
+    request<LivekitTokenResponse>(`/servers/${serverId}/rooms/${roomId}/token`, {
       method: "POST",
       token,
     }),

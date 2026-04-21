@@ -3,7 +3,8 @@ import { AuthProvider } from "./contexts/AuthContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
-import { RoomsPage } from "./pages/RoomsPage";
+import { ServersLayout } from "./pages/ServersLayout";
+import { ServerPage } from "./pages/ServerPage";
 import { RoomPage } from "./pages/RoomPage";
 import "./App.css";
 
@@ -15,22 +16,17 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route
-            path="/rooms"
+            path="/servers"
             element={
               <ProtectedRoute>
-                <RoomsPage />
+                <ServersLayout />
               </ProtectedRoute>
             }
-          />
-          <Route
-            path="/rooms/:roomId"
-            element={
-              <ProtectedRoute>
-                <RoomPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to="/rooms" replace />} />
+          >
+            <Route path=":serverId" element={<ServerPage />} />
+            <Route path=":serverId/rooms/:roomId" element={<RoomPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/servers" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

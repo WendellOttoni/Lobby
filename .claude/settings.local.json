@@ -36,7 +36,14 @@
       "Bash(curl -s http://localhost:1420/)",
       "Bash(curl -s -X OPTIONS http://localhost:3000/auth/register -H 'Origin: http://localhost:1420' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type' -D - -o /dev/null)",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:1420/)",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Bash(railway service *)",
+      "Bash(railway variables *)",
+      "Bash(railway up *)",
+      "Bash(curl *)",
+      "Bash(PowerShell *)",
+      "Bash(cargo check *)",
+      "Bash(git push *)"
     ]
   }
 }

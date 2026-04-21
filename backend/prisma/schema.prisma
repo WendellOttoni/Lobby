@@ -13,14 +13,43 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
 
-  roomMemberships RoomMember[]
+  ownedServers      Server[]       @relation("ServerOwner")
+  serverMemberships ServerMember[]
+  roomMemberships   RoomMember[]
+}
+
+model Server {
+  id         String   @id @default(cuid())
+  name       String
+  inviteCode String   @unique
+  ownerId    String
+  createdAt  DateTime @default(now())
+
+  owner   User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members ServerMember[]
+  rooms   Room[]
+}
+
+model ServerMember {
+  id       String   @id @default(cuid())
+  userId   String
+  serverId String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
 }
 
 model Room {
   id        String   @id @default(cuid())
   name      String
+  serverId  String
   createdAt DateTime @default(now())
 
+  server  Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
   members RoomMember[]
 }
 
