@@ -8,6 +8,8 @@ use tauri::{
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Abrir", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
@@ -43,6 +45,18 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Ok(updater) = tauri_plugin_updater::UpdaterExt::updater(&handle) {
+                    if let Ok(Some(update)) = updater.check().await {
+                        if let Ok(()) = update.download_and_install(|_, _| {}, || {}).await {
+                            handle.restart();
+                        }
+                    }
+                }
+            });
+
             Ok(())
         })
         .on_window_event(|window, event| {
