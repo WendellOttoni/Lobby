@@ -1,5 +1,6 @@
 import "dotenv/config";
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
 import roomsRoutes from "./routes/rooms.js";
@@ -11,6 +12,11 @@ const fastify = Fastify({
       options: { colorize: true },
     },
   },
+});
+
+fastify.register(cors, {
+  origin: ["http://localhost:1420", "tauri://localhost"],
+  credentials: true,
 });
 
 fastify.register(jwtPlugin);
