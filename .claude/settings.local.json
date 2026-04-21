@@ -1,7 +1,32 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(npm --version)",
+      "Bash(npm init *)",
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(npm run *)",
+      "Bash(winget --version)",
+      "Bash(rustc --version)",
+      "Bash(psql --version)",
+      "Bash(redis-cli --version)",
+      "Bash(git --version)",
+      "Bash(winget list *)",
+      "Bash(winget install *)",
+      "Bash(curl -sL https://api.github.com/repos/livekit/livekit/releases/latest)",
+      "Bash(curl -L -o livekit.zip https://github.com/livekit/livekit/releases/download/v1.11.0/livekit_1.11.0_windows_amd64.zip)",
+      "Bash(unzip -o livekit.zip)",
+      "Bash(./livekit-server.exe generate-keys *)",
+      "Bash(node *)",
+      "Bash(PGPASSWORD=1234 /c/Program Files/PostgreSQL/18/bin/psql.exe *)",
+      "Bash(./livekit-server.exe --config livekit.yaml --dev)",
+      "Bash(curl -s http://localhost:3000/health)",
+      "Bash(curl -s http://localhost:7880)",
+      "Bash(curl -s -X POST http://localhost:3000/auth/register -H 'Content-Type: application/json' -d '{\"username\":\"wendell\",\"email\":\"wendell@test.com\",\"password\":\"senha123\"}')",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:3000/auth/register -H \"Content-Type: application/json\" -d '{\"username\":\"wendell\",\"email\":\"wendell@test.com\",\"password\":\"senha123\"}')"
     ]
   }
 }

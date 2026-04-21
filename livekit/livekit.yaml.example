@@ -9,9 +9,9 @@ rtc:
   port_range_end: 60000
 
 keys:
-  # Substitua pelos valores gerados com: livekit-server generate-keys
-  # e copie para o .env do backend (LIVEKIT_API_KEY / LIVEKIT_API_SECRET)
-  devkey: devsecret
+  # Gere suas chaves com: ./livekit-server.exe generate-keys
+  # Copie para livekit.yaml (sem .example) e para backend/.env
+  SUA_API_KEY: SEU_API_SECRET
 
 logging:
   level: info

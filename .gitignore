@@ -42,6 +42,8 @@ Thumbs.db
 # Prisma generated
 backend/src/db/generated/
 
-# LiveKit binary (baixar manualmente)
+# LiveKit — binário e config com chaves reais
 livekit/livekit-server*
 livekit/*.exe
+livekit/LICENSE
+livekit/livekit.yaml
