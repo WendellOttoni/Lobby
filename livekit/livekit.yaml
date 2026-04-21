@@ -1,0 +1,19 @@
+# LiveKit Server — configuração local de desenvolvimento
+# Baixe o binário em: https://github.com/livekit/livekit/releases
+# Execute com: livekit-server --config livekit.yaml
+
+port: 7880
+rtc:
+  tcp_port: 7881
+  port_range_start: 50000
+  port_range_end: 60000
+
+keys:
+  # Substitua pelos valores gerados com: livekit-server generate-keys
+  # e copie para o .env do backend (LIVEKIT_API_KEY / LIVEKIT_API_SECRET)
+  devkey: devsecret
+
+logging:
+  level: info
+
+development: true
