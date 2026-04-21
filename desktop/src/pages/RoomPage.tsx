@@ -39,12 +39,15 @@ export function RoomPage() {
   const [localMicTrack, setLocalMicTrack] = useState<MediaStreamTrack | null>(
     null
   );
+  const [reconnectKey, setReconnectKey] = useState(0);
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!roomId || !token) return;
 
     let cancelled = false;
-    const room = new Room({ adaptiveStream: true, dynacast: true });
+    setError(null);
+    const room = new Room({ dynacast: true });
     roomRef.current = room;
 
     function snapshot() {
@@ -117,19 +120,45 @@ export function RoomPage() {
       .on(RoomEvent.LocalTrackUnpublished, onLocalTrackUnpublished)
       .on(RoomEvent.ConnectionStateChanged, (state) => {
         if (!cancelled) setConnectionState(state);
+        if (state === ConnectionState.Connected && !cancelled) snapshot();
+      })
+      .on(RoomEvent.Disconnected, () => {
+        if (cancelled) return;
+        reconnectTimer.current = setTimeout(() => {
+          if (!cancelled) setReconnectKey((k) => k + 1);
+        }, 2000);
       });
 
     (async () => {
       try {
         const { token: lkToken, url } = await api.getRoomToken(token, roomId);
         await room.connect(url, lkToken);
+        if (cancelled) return;
+
+        snapshot();
+
         await room.localParticipant.setMicrophoneEnabled(true);
+        if (cancelled) return;
+
+        const micPub = room.localParticipant.getTrackPublication(
+          Track.Source.Microphone
+        );
+        const micTrack = micPub?.track as LocalAudioTrack | undefined;
+        if (micTrack) setLocalMicTrack(micTrack.mediaStreamTrack);
 
         const devices = await Room.getLocalDevices("audioinput");
         if (cancelled) return;
         setAudioDevices(devices);
-        const active = room.getActiveDevice("audioinput");
-        setSelectedDevice(active ?? devices[0]?.deviceId ?? "");
+
+        const saved = localStorage.getItem("lobby_mic_device");
+        const preferred = saved && devices.find((d) => d.deviceId === saved);
+        if (preferred) {
+          await room.switchActiveDevice("audioinput", preferred.deviceId);
+          setSelectedDevice(preferred.deviceId);
+        } else {
+          const active = room.getActiveDevice("audioinput");
+          setSelectedDevice(active ?? devices[0]?.deviceId ?? "");
+        }
         snapshot();
       } catch (err) {
         if (!cancelled) {
@@ -142,11 +171,12 @@ export function RoomPage() {
 
     return () => {
       cancelled = true;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
       room.disconnect();
       roomRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roomId, token]);
+  }, [roomId, token, reconnectKey]);
 
   async function toggleMute() {
     const room = roomRef.current;
@@ -166,6 +196,12 @@ export function RoomPage() {
     try {
       await room.switchActiveDevice("audioinput", deviceId);
       setSelectedDevice(deviceId);
+      localStorage.setItem("lobby_mic_device", deviceId);
+      const micPub = room.localParticipant.getTrackPublication(
+        Track.Source.Microphone
+      );
+      const micTrack = micPub?.track as LocalAudioTrack | undefined;
+      setLocalMicTrack(micTrack?.mediaStreamTrack ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao trocar microfone");
     }
@@ -202,6 +238,13 @@ export function RoomPage() {
       </header>
 
       {error && <p className="error">{error}</p>}
+
+      {(connectionState === ConnectionState.Reconnecting ||
+        connectionState === ConnectionState.SignalReconnecting ||
+        (connectionState === ConnectionState.Disconnected &&
+          reconnectKey > 0)) && (
+        <p className="reconnecting">Reconectando, aguarde...</p>
+      )}
 
       <section className="participants">
         <h2>Participantes ({participants.length})</h2>

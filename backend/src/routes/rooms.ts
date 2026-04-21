@@ -1,6 +1,14 @@
 import { FastifyPluginAsync } from "fastify";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
 import prisma from "../db/client.js";
+
+function getRoomService() {
+  return new RoomServiceClient(
+    process.env.LIVEKIT_URL!,
+    process.env.LIVEKIT_API_KEY!,
+    process.env.LIVEKIT_API_SECRET!
+  );
+}
 
 const roomsRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -28,17 +36,29 @@ const roomsRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.get("/", async (_request, reply) => {
-    const rooms = await prisma.room.findMany({
-      select: {
-        id: true,
-        name: true,
-        createdAt: true,
-        _count: { select: { members: true } },
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const [rooms, lkRooms] = await Promise.all([
+      prisma.room.findMany({
+        select: {
+          id: true,
+          name: true,
+          createdAt: true,
+          _count: { select: { members: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      }),
+      getRoomService().listRooms().catch(() => []),
+    ]);
 
-    return reply.send({ rooms });
+    const onlineMap = new Map<string, number>(
+      lkRooms.map((r) => [r.name, r.numParticipants])
+    );
+
+    const roomsWithPresence = rooms.map((r) => ({
+      ...r,
+      onlineCount: onlineMap.get(r.id) ?? 0,
+    }));
+
+    return reply.send({ rooms: roomsWithPresence });
   });
 
   fastify.post("/:roomId/token", async (request, reply) => {

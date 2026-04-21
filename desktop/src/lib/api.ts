@@ -1,4 +1,4 @@
-const API_URL = "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 export interface User {
   id: string;
@@ -11,6 +11,7 @@ export interface Room {
   id: string;
   name: string;
   createdAt: string;
+  onlineCount: number;
   _count?: { members: number };
 }
 
@@ -42,6 +43,7 @@ async function request<T>(
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      "ngrok-skip-browser-warning": "true",
       ...headers,
     },
   });

@@ -14,8 +14,24 @@ const fastify = Fastify({
   },
 });
 
+const extraOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()) ?? [];
+
 fastify.register(cors, {
-  origin: ["http://localhost:1420", "tauri://localhost"],
+  origin: (origin, cb) => {
+    if (
+      !origin ||
+      origin === "http://localhost:1420" ||
+      origin === "http://localhost:5173" ||
+      origin === "tauri://localhost" ||
+      origin === "http://tauri.localhost" ||
+      origin.includes(".ngrok") ||
+      extraOrigins.includes(origin)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("CORS: origin não permitida"), false);
+    }
+  },
   credentials: true,
 });
 

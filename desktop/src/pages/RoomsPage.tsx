@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { api, Room } from "../lib/api";
@@ -10,12 +10,14 @@ export function RoomsPage() {
   const [newRoomName, setNewRoomName] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function loadRooms() {
     if (!token) return;
     try {
       const { rooms } = await api.listRooms(token);
       setRooms(rooms);
+      setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao listar salas");
     } finally {
@@ -25,6 +27,10 @@ export function RoomsPage() {
 
   useEffect(() => {
     loadRooms();
+    intervalRef.current = setInterval(loadRooms, 10_000);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [token]);
 
   async function onCreateRoom(e: FormEvent) {
@@ -73,8 +79,8 @@ export function RoomsPage() {
             <li key={room.id}>
               <div>
                 <strong>{room.name}</strong>
-                <span className="members">
-                  {room._count?.members ?? 0} participante(s)
+                <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
+                  {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
                 </span>
               </div>
               <button onClick={() => navigate(`/rooms/${room.id}`)}>
