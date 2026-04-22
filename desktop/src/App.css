@@ -865,13 +865,20 @@ a:hover {
   min-width: 220px;
   display: flex;
   flex-direction: column;
-  padding: 24px 16px 16px 24px;
-  gap: 14px;
   border-right: 1px solid var(--border);
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.rooms-column h1 {
+.rooms-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 16px 16px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rooms-scroll h1 {
   margin: 0;
   font-size: 18px;
   font-weight: 800;
@@ -1143,7 +1150,6 @@ a:hover {
 /* ── Sidebar user actions ── */
 .sidebar-user-actions {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 2px;
 }
@@ -1152,10 +1158,15 @@ a:hover {
   background: transparent;
   border: none;
   color: var(--text-dim);
-  font-size: 15px;
-  padding: 3px 6px;
+  font-size: 14px;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 
@@ -1163,6 +1174,11 @@ a:hover {
   background: var(--surface-hover);
   color: var(--text);
   box-shadow: none;
+}
+
+.sidebar-action-logout:hover:not(:disabled) {
+  background: rgba(240, 71, 71, 0.12);
+  color: var(--danger);
 }
 
 /* ── Settings modal ── */
@@ -1272,4 +1288,285 @@ a:hover {
   font-family: var(--font-mono);
   color: var(--accent);
   font-size: 12px;
+}
+
+/* ── Voice room list ── */
+.voice-room-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-room-item {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  overflow: hidden;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.voice-room-item:hover {
+  background: var(--surface);
+  border-color: var(--border);
+}
+
+.voice-room-item.active {
+  background: var(--surface);
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px rgba(59, 165, 93, 0.15);
+}
+
+.voice-room-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 8px;
+}
+
+.voice-room-icon {
+  font-size: 13px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+
+.voice-room-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-room-action {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.voice-room-count {
+  display: block;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  padding: 0 10px 8px 31px;
+  letter-spacing: 0.03em;
+}
+
+.voice-room-count.online {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.voice-room-count.online::before {
+  content: "● ";
+  font-size: 7px;
+}
+
+/* Inline participants list */
+.voice-room-participants {
+  list-style: none;
+  padding: 0 10px 8px 28px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.voice-room-participants li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-dim);
+  transition: color 0.15s;
+}
+
+.voice-room-participants li.speaking {
+  color: var(--text);
+}
+
+.vp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.vp-dot.live { background: var(--green); }
+.vp-dot.muted { background: var(--text-dim); opacity: 0.4; }
+.vp-dot.speaking {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green);
+}
+
+.vp-name {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vp-you {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.vp-muted {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--danger);
+  opacity: 0.7;
+}
+
+/* ── Voice bar (bottom of rooms column) ── */
+.voice-bar {
+  flex-shrink: 0;
+  border-top: 1px solid var(--border);
+  background: rgba(59, 165, 93, 0.04);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.voice-bar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.voice-bar-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.voice-bar-dot.green { background: var(--green); box-shadow: 0 0 5px var(--green); }
+.voice-bar-dot.yellow { background: #edb242; }
+.voice-bar-dot.red { background: var(--danger); }
+
+.voice-bar-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.voice-bar-room {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--green);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-bar-sub {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  letter-spacing: 0.03em;
+}
+
+.voice-bar-leave {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.voice-bar-leave:hover:not(:disabled) {
+  background: rgba(240, 71, 71, 0.12);
+  color: var(--danger);
+  box-shadow: none;
+}
+
+.voice-bar-meter {
+  height: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.voice-bar-meter .mic-meter {
+  height: 8px;
+}
+
+.voice-bar-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.voice-bar-mute {
+  flex: 1;
+  font-size: 11px;
+  padding: 5px 8px;
+  border-radius: 6px;
+}
+
+.voice-bar-mute.muted {
+  background: var(--danger);
+}
+
+.voice-bar-mute.muted:hover:not(:disabled) {
+  background: #c03b3b;
+  box-shadow: 0 0 0 3px rgba(240, 71, 71, 0.2);
+}
+
+.voice-bar-select {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  color: var(--text);
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.voice-bar-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.voice-bar-volume {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+}
+
+.voice-bar-volume span {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  flex-shrink: 0;
+}
+
+.voice-bar-volume input[type="range"] {
+  flex: 1;
+  width: auto;
+  padding: 0;
+  background: transparent;
+  border: none;
+  accent-color: var(--green);
 }

@@ -1,13 +1,15 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useVoice } from "../contexts/VoiceContext";
 import { api, Room, Server } from "../lib/api";
 import { ChatPanel } from "../components/ChatPanel";
+import { VoiceBar } from "../components/VoiceBar";
 
 export function ServerPage() {
   const { serverId } = useParams<{ serverId: string }>();
   const { user, token } = useAuth();
-  const navigate = useNavigate();
+  const voice = useVoice();
 
   const [server, setServer] = useState<Server | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -74,10 +76,9 @@ export function ServerPage() {
     }
   }
 
-  function enterRoom(room: Room) {
-    navigate(`/servers/${serverId}/rooms/${room.id}`, {
-      state: { roomName: room.name },
-    });
+  async function handleEnterRoom(room: Room) {
+    if (!token || !serverId) return;
+    await voice.connect(token, serverId, room.id, room.name);
   }
 
   if (loading) return <div className="server-loading">Carregando...</div>;
@@ -86,86 +87,117 @@ export function ServerPage() {
     <div className="server-content">
       {/* Coluna esquerda — salas de voz */}
       <div className="rooms-column">
-        <div className="rooms-column-header">
-          <h1>{server?.name ?? "Servidor"}</h1>
-          <button
-            className="btn-secondary"
-            onClick={() => setShowInvite(!showInvite)}
-            style={{ padding: "6px 12px", fontSize: "12px" }}
-          >
-            Convidar
-          </button>
-        </div>
-
-        {showInvite && (
-          <div className="invite-box">
-            <span>Código:</span>
-            <code>{inviteCode}</code>
+        <div className="rooms-scroll">
+          <div className="rooms-column-header">
+            <h1>{server?.name ?? "Servidor"}</h1>
             <button
-              onClick={() => navigator.clipboard.writeText(inviteCode)}
               className="btn-secondary"
-              style={{ padding: "4px 10px", fontSize: "12px" }}
+              onClick={() => setShowInvite(!showInvite)}
+              style={{ padding: "6px 12px", fontSize: "12px" }}
             >
-              Copiar
+              Convidar
             </button>
-            {server?.ownerId === user?.id && (
+          </div>
+
+          {showInvite && (
+            <div className="invite-box">
+              <span>Código:</span>
+              <code>{inviteCode}</code>
               <button
-                onClick={handleResetInvite}
-                className="btn-danger-outline"
+                onClick={() => navigator.clipboard.writeText(inviteCode)}
+                className="btn-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
               >
-                Resetar
+                Copiar
               </button>
-            )}
-          </div>
-        )}
-
-        <form onSubmit={onCreateRoom} style={{ display: "flex", gap: "6px" }}>
-          <input
-            placeholder="Nova sala..."
-            value={newRoomName}
-            onChange={(e) => setNewRoomName(e.target.value)}
-            maxLength={64}
-            style={{ fontSize: "13px", padding: "8px 10px" }}
-          />
-          <button
-            type="submit"
-            disabled={!newRoomName.trim()}
-            style={{ padding: "8px 12px", fontSize: "13px", flexShrink: 0 }}
-          >
-            +
-          </button>
-        </form>
-
-        {error && <p className="error" style={{ fontSize: "13px" }}>{error}</p>}
-
-        <ul className="room-list" style={{ gap: "4px" }}>
-          {rooms.length === 0 ? (
-            <p className="empty" style={{ padding: "24px 0", fontSize: "13px" }}>
-              Nenhuma sala ainda.
-            </p>
-          ) : (
-            rooms.map((room) => (
-              <li key={room.id} onClick={() => enterRoom(room)}>
-                <div className="room-list-left">
-                  <span className="room-list-icon">🔊</span>
-                  <div className="room-list-info">
-                    <strong style={{ fontSize: "14px" }}>{room.name}</strong>
-                    <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
-                      {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
-                    </span>
-                  </div>
-                </div>
+              {server?.ownerId === user?.id && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); enterRoom(room); }}
-                  style={{ padding: "5px 12px", fontSize: "12px" }}
+                  onClick={handleResetInvite}
+                  className="btn-danger-outline"
+                  style={{ padding: "4px 10px", fontSize: "12px" }}
                 >
-                  Entrar
+                  Resetar
                 </button>
-              </li>
-            ))
+              )}
+            </div>
           )}
-        </ul>
+
+          <form onSubmit={onCreateRoom} style={{ display: "flex", gap: "6px" }}>
+            <input
+              placeholder="Nova sala..."
+              value={newRoomName}
+              onChange={(e) => setNewRoomName(e.target.value)}
+              maxLength={64}
+              style={{ fontSize: "13px", padding: "8px 10px" }}
+            />
+            <button
+              type="submit"
+              disabled={!newRoomName.trim()}
+              style={{ padding: "8px 12px", fontSize: "13px", flexShrink: 0 }}
+            >
+              +
+            </button>
+          </form>
+
+          {error && <p className="error" style={{ fontSize: "13px" }}>{error}</p>}
+          {voice.error && <p className="error" style={{ fontSize: "13px" }}>{voice.error}</p>}
+
+          <ul className="voice-room-list">
+            {rooms.length === 0 ? (
+              <p className="empty" style={{ padding: "24px 0", fontSize: "13px" }}>
+                Nenhuma sala ainda.
+              </p>
+            ) : (
+              rooms.map((room) => {
+                const isActive = voice.activeRoomId === room.id && voice.activeServerId === serverId;
+                return (
+                  <li key={room.id} className={`voice-room-item ${isActive ? "active" : ""}`}>
+                    <div className="voice-room-header">
+                      <span className="voice-room-icon">🔊</span>
+                      <span className="voice-room-name">{room.name}</span>
+                      {isActive ? (
+                        <button
+                          className="btn-danger-outline voice-room-action"
+                          onClick={voice.disconnect}
+                        >
+                          Sair
+                        </button>
+                      ) : (
+                        <button
+                          className="voice-room-action"
+                          onClick={() => handleEnterRoom(room)}
+                        >
+                          Entrar
+                        </button>
+                      )}
+                    </div>
+
+                    {isActive ? (
+                      <ul className="voice-room-participants">
+                        {voice.participants.map((p) => (
+                          <li key={p.identity} className={p.isSpeaking ? "speaking" : ""}>
+                            <span className={`vp-dot ${p.isSpeaking ? "speaking" : p.isMuted ? "muted" : "live"}`} />
+                            <span className="vp-name">
+                              {p.name}
+                              {p.isLocal && <span className="vp-you"> (você)</span>}
+                            </span>
+                            {p.isMuted && <span className="vp-muted">mudo</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <span className={`voice-room-count ${room.onlineCount > 0 ? "online" : ""}`}>
+                        {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
+                      </span>
+                    )}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+
+        <VoiceBar />
       </div>
 
       {/* Coluna direita — chat */}

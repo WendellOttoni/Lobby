@@ -50,8 +50,8 @@ export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Pr
           <button className="sidebar-action-btn" onClick={onSettings} title="Configurações">
             ⚙
           </button>
-          <button className="sidebar-logout-btn" onClick={onLogout}>
-            sair
+          <button className="sidebar-action-btn sidebar-action-logout" onClick={onLogout} title="Sair">
+            ⏻
           </button>
         </div>
       </div>
