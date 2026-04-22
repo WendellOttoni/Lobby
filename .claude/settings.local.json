@@ -43,7 +43,9 @@
       "Bash(curl *)",
       "Bash(PowerShell *)",
       "Bash(cargo check *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(cargo add *)",
+      "Bash(cargo fetch *)"
     ]
   }
 }
