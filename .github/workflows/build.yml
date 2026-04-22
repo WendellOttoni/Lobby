@@ -1,4 +1,4 @@
-name: Canary Build
+name: Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
       - main
 
 jobs:
-  canary:
+  build:
     permissions:
       contents: write
     runs-on: windows-latest
@@ -33,7 +33,7 @@ jobs:
         run: npm ci
         working-directory: desktop
 
-      - name: Set canary version
+      - name: Set version
         shell: pwsh
         run: |
           $version = "0.0.${{ github.run_number }}"
@@ -41,18 +41,18 @@ jobs:
           $content = Get-Content $file -Raw
           $content = $content -replace '"version":\s*"[^"]*"', """version"": ""$version"""
           Set-Content $file $content -Encoding utf8
-          Write-Host "Canary version: $version"
+          Write-Host "Version: $version"
 
-      - name: Delete existing canary release
+      - name: Delete existing release
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete canary --yes 2>$null
-          git push --delete origin canary 2>$null
+          gh release delete latest --yes 2>$null
+          git push --delete origin latest 2>$null
           exit 0
 
-      - name: Build and publish canary
+      - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -60,12 +60,11 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         with:
           projectPath: desktop
-          tagName: canary
-          releaseName: "Lobby — última build"
+          tagName: latest
+          releaseName: "Lobby — build ${{ github.run_number }}"
           releaseBody: |
-            ⚠️ Build automática gerada a partir do branch `main`.
+            Build automática gerada a partir do branch `main`.
             Commit: `${{ github.sha }}`
-            Não afeta o auto-updater dos usuários finais.
           releaseDraft: false
-          prerelease: true
-          includeUpdaterJson: false
+          prerelease: false
+          includeUpdaterJson: true
