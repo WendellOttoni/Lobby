@@ -36,8 +36,7 @@ jobs:
       - name: Set canary version
         shell: pwsh
         run: |
-          $date = Get-Date -Format "yyyy.MM.dd"
-          $version = "$date.${{ github.run_number }}"
+          $version = "0.0.${{ github.run_number }}"
           $file = "desktop/src-tauri/tauri.conf.json"
           $content = Get-Content $file -Raw
           $content = $content -replace '"version":\s*"[^"]*"', """version"": ""$version"""
