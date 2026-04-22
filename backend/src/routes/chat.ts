@@ -10,10 +10,31 @@ interface ChatMessage {
   authorName: string;
 }
 
+interface RateBucket {
+  tokens: number;
+  lastRefill: number;
+}
+
 interface Connection {
   ws: WebSocket;
   userId: string;
   username: string;
+  bucket: RateBucket;
+}
+
+const RATE_CAPACITY = 5;
+const RATE_REFILL_PER_SEC = 2;
+
+function consumeToken(bucket: RateBucket): boolean {
+  const now = Date.now();
+  const elapsed = (now - bucket.lastRefill) / 1000;
+  bucket.tokens = Math.min(RATE_CAPACITY, bucket.tokens + elapsed * RATE_REFILL_PER_SEC);
+  bucket.lastRefill = now;
+  if (bucket.tokens >= 1) {
+    bucket.tokens -= 1;
+    return true;
+  }
+  return false;
 }
 
 const rooms = new Map<string, Set<Connection>>();
@@ -59,7 +80,12 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
       // Join room
       if (!rooms.has(serverId)) rooms.set(serverId, new Set());
-      const conn: Connection = { ws: socket, userId, username };
+      const conn: Connection = {
+        ws: socket,
+        userId,
+        username,
+        bucket: { tokens: RATE_CAPACITY, lastRefill: Date.now() },
+      };
       rooms.get(serverId)!.add(conn);
 
       // Send history (last 80 messages, oldest first)
@@ -88,6 +114,16 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         try {
           const data = JSON.parse(raw.toString());
           if (data.type !== "message" || !data.content?.trim()) return;
+
+          if (!consumeToken(conn.bucket)) {
+            socket.send(
+              JSON.stringify({
+                type: "error",
+                message: "Você está enviando mensagens muito rápido. Aguarde alguns segundos.",
+              })
+            );
+            return;
+          }
 
           const content = String(data.content).trim().slice(0, 2000);
 

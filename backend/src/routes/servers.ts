@@ -1,14 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
-import { AccessToken, RoomServiceClient } from "livekit-server-sdk";
+import { AccessToken } from "livekit-server-sdk";
 import prisma from "../db/client.js";
-
-function getRoomService() {
-  return new RoomServiceClient(
-    process.env.LIVEKIT_URL!,
-    process.env.LIVEKIT_API_KEY!,
-    process.env.LIVEKIT_API_SECRET!
-  );
-}
+import { getRoomService } from "../services/livekit.js";
 
 function generateCode(len = 8) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";

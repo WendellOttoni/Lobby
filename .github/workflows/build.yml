@@ -34,6 +34,7 @@ jobs:
         working-directory: desktop
 
       - name: Set version
+        id: version
         shell: pwsh
         run: |
           $version = "0.0.${{ github.run_number }}"
@@ -42,15 +43,7 @@ jobs:
           $content = $content -replace '"version":\s*"[^"]*"', """version"": ""$version"""
           Set-Content $file $content -Encoding utf8
           Write-Host "Version: $version"
-
-      - name: Delete existing release
-        shell: pwsh
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release delete latest --yes 2>$null
-          git push --delete origin latest 2>$null
-          exit 0
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
@@ -60,11 +53,23 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL }}
         with:
           projectPath: desktop
-          tagName: latest
-          releaseName: "Lobby — build ${{ github.run_number }}"
+          tagName: v${{ steps.version.outputs.version }}
+          releaseName: "Lobby v${{ steps.version.outputs.version }}"
           releaseBody: |
             Build automática gerada a partir do branch `main`.
             Commit: `${{ github.sha }}`
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
+
+      - name: Prune old releases (keep last 10)
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $releases = gh release list --limit 100 --json tagName,createdAt | ConvertFrom-Json
+          $toDelete = $releases | Sort-Object createdAt -Descending | Select-Object -Skip 10
+          foreach ($r in $toDelete) {
+            Write-Host "Deleting old release: $($r.tagName)"
+            gh release delete $r.tagName --yes --cleanup-tag
+          }

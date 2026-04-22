@@ -6,6 +6,8 @@ import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
 import serversRoutes from "./routes/servers.js";
 import chatRoutes from "./routes/chat.js";
+import prisma from "./db/client.js";
+import { getRoomService } from "./services/livekit.js";
 
 const fastify = Fastify({
   logger: {
@@ -43,7 +45,28 @@ fastify.register(authRoutes, { prefix: "/auth" });
 fastify.register(serversRoutes, { prefix: "/servers" });
 fastify.register(chatRoutes);
 
-fastify.get("/health", async () => ({ status: "ok" }));
+fastify.get("/health", async (_, reply) => {
+  const checks: Record<string, "ok" | "fail"> = {};
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    checks.db = "ok";
+  } catch {
+    checks.db = "fail";
+  }
+
+  try {
+    await getRoomService().listRooms();
+    checks.livekit = "ok";
+  } catch {
+    checks.livekit = "fail";
+  }
+
+  const allOk = Object.values(checks).every((v) => v === "ok");
+  return reply
+    .status(allOk ? 200 : 503)
+    .send({ status: allOk ? "ok" : "degraded", checks });
+});
 
 const start = async () => {
   try {

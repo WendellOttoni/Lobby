@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { avatarBg, avatarInitials } from "../lib/avatar";
 
 interface ChatMessage {
   id: string;
@@ -37,23 +38,6 @@ function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean 
   return new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
 }
 
-const AVATAR_COLORS = [
-  "#5865f2", "#3ba55d", "#faa61a", "#ed4245",
-  "#00b0f4", "#a660e8", "#f47b67", "#43b581",
-];
-
-function avatarBg(id: string): string {
-  let hash = 0;
-  for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
-}
-
-function avatarInitials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
-}
-
 export function ChatPanel({ serverId, token, currentUserId }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
@@ -63,23 +47,55 @@ export function ChatPanel({ serverId, token, currentUserId }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const url = `${wsUrl()}/servers/${serverId}/ws?token=${token}`;
-    const ws = new WebSocket(url);
-    wsRef.current = ws;
+    setMessages([]);
+    let cancelled = false;
+    let retryDelay = 1000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
-    ws.onopen = () => setConnected(true);
-    ws.onclose = () => setConnected(false);
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      if (data.type === "history") {
-        setMessages(data.messages);
-      } else if (data.type === "message") {
-        setMessages((prev) => [...prev, data]);
+    function mergeHistory(prev: ChatMessage[], incoming: ChatMessage[]): ChatMessage[] {
+      const seen = new Set(prev.map((m) => m.id));
+      const merged = [...prev];
+      for (const m of incoming) {
+        if (!seen.has(m.id)) merged.push(m);
       }
-    };
+      return merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    }
 
-    return () => ws.close();
+    function open() {
+      if (cancelled) return;
+      const url = `${wsUrl()}/servers/${serverId}/ws?token=${token}`;
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        retryDelay = 1000;
+        setConnected(true);
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        if (cancelled) return;
+        retryTimer = setTimeout(open, retryDelay);
+        retryDelay = Math.min(retryDelay * 2, 15000);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === "history") {
+          setMessages((prev) => mergeHistory(prev, data.messages));
+        } else if (data.type === "message") {
+          setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
+        }
+      };
+    }
+
+    open();
+
+    return () => {
+      cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      wsRef.current?.close();
+    };
   }, [serverId, token]);
 
   useEffect(() => {

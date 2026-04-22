@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
 import { api, Room, Server } from "../lib/api";
 import { ChatPanel } from "../components/ChatPanel";
+import { ParticipantCard } from "../components/ParticipantCard";
 import { VoiceBar } from "../components/VoiceBar";
 
 export function ServerPage() {
@@ -173,18 +174,18 @@ export function ServerPage() {
                     </div>
 
                     {isActive ? (
-                      <ul className="voice-room-participants">
+                      <div className="participant-grid">
                         {voice.participants.map((p) => (
-                          <li key={p.identity} className={p.isSpeaking ? "speaking" : ""}>
-                            <span className={`vp-dot ${p.isSpeaking ? "speaking" : p.isMuted ? "muted" : "live"}`} />
-                            <span className="vp-name">
-                              {p.name}
-                              {p.isLocal && <span className="vp-you"> (você)</span>}
-                            </span>
-                            {p.isMuted && <span className="vp-muted">mudo</span>}
-                          </li>
+                          <ParticipantCard
+                            key={p.identity}
+                            participant={p}
+                            nickname={voice.nicknames[p.identity] ?? ""}
+                            userVolume={voice.userVolumes[p.identity] ?? 1}
+                            onSetNickname={(n) => voice.setNickname(p.identity, n)}
+                            onSetVolume={(v) => voice.setUserVolume(p.identity, v)}
+                          />
                         ))}
-                      </ul>
+                      </div>
                     ) : (
                       <span className={`voice-room-count ${room.onlineCount > 0 ? "online" : ""}`}>
                         {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
