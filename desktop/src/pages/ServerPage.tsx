@@ -73,6 +73,16 @@ export function ServerPage() {
     }
   }
 
+  function enterRoom(room: Room) {
+    navigate(`/servers/${serverId}/rooms/${room.id}`, {
+      state: { roomName: room.name },
+    });
+  }
+
+  const userInitials = user?.username
+    ? user.username.slice(0, 2).toUpperCase()
+    : "?";
+
   if (loading) return <div className="server-loading">Carregando...</div>;
 
   return (
@@ -83,9 +93,12 @@ export function ServerPage() {
           <button className="btn-secondary" onClick={() => setShowInvite(!showInvite)}>
             Convidar
           </button>
-          <div className="user">
-            <span>{user?.username}</span>
-            <button onClick={logout}>Sair</button>
+          <div className="user-info">
+            <div className="user-avatar">{userInitials}</div>
+            <span className="user-name">{user?.username}</span>
+            <button className="btn-secondary" onClick={logout} style={{ padding: "6px 12px", fontSize: "13px" }}>
+              Sair
+            </button>
           </div>
         </div>
       </header>
@@ -110,7 +123,7 @@ export function ServerPage() {
 
       <form className="create-room" onSubmit={onCreateRoom}>
         <input
-          placeholder="Nome da nova sala"
+          placeholder="Nome da nova sala de voz..."
           value={newRoomName}
           onChange={(e) => setNewRoomName(e.target.value)}
           maxLength={64}
@@ -127,14 +140,17 @@ export function ServerPage() {
       ) : (
         <ul className="room-list">
           {rooms.map((room) => (
-            <li key={room.id}>
-              <div>
-                <strong>{room.name}</strong>
-                <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
-                  {room.onlineCount > 0 ? `● ${room.onlineCount} online` : "vazia"}
-                </span>
+            <li key={room.id} onClick={() => enterRoom(room)}>
+              <div className="room-list-left">
+                <span className="room-list-icon">🔊</span>
+                <div className="room-list-info">
+                  <strong>{room.name}</strong>
+                  <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
+                    {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
+                  </span>
+                </div>
               </div>
-              <button onClick={() => navigate(`/servers/${serverId}/rooms/${room.id}`)}>
+              <button onClick={(e) => { e.stopPropagation(); enterRoom(room); }}>
                 Entrar
               </button>
             </li>

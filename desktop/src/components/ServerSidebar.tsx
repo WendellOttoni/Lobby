@@ -17,7 +17,7 @@ export function ServerSidebar({ servers, onAdd }: Props) {
           key={s.id}
           className={`server-icon ${s.id === serverId ? "active" : ""}`}
           onClick={() => navigate(`/servers/${s.id}`)}
-          title={s.name}
+          data-tooltip={s.name}
         >
           {s.name.slice(0, 2).toUpperCase()}
         </button>
@@ -25,7 +25,11 @@ export function ServerSidebar({ servers, onAdd }: Props) {
 
       <div className="sidebar-divider" />
 
-      <button className="server-icon add-server" onClick={onAdd} title="Criar ou entrar em servidor">
+      <button
+        className="server-icon add-server"
+        onClick={onAdd}
+        data-tooltip="Criar ou entrar em servidor"
+      >
         +
       </button>
     </nav>

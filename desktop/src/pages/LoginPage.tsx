@@ -16,7 +16,7 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login(email, password);
-      navigate("/rooms");
+      navigate("/servers");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao entrar");
     } finally {
@@ -26,8 +26,12 @@ export function LoginPage() {
 
   return (
     <main className="auth">
-      <h1>Lobby</h1>
-      <h2>Entrar</h2>
+      <div className="auth-brand">
+        <img src="/logo.png" alt="Lobby" />
+        <h1>Lobby</h1>
+        <h2>Entre na sua conta</h2>
+      </div>
+
       <form onSubmit={onSubmit}>
         <input
           type="email"
@@ -49,6 +53,7 @@ export function LoginPage() {
           {submitting ? "Entrando..." : "Entrar"}
         </button>
       </form>
+
       <p>
         Ainda não tem conta? <Link to="/register">Cadastre-se</Link>
       </p>

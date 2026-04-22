@@ -8,6 +8,7 @@
   --accent: #5865f2;
   --accent-hover: #4752c4;
   --danger: #ed4245;
+  --green: #3ba55d;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: dark;
 }
@@ -110,25 +111,41 @@ a:hover {
   color: var(--text-dim);
 }
 
-/* Auth pages */
+/* ── Auth pages ── */
 .auth {
-  max-width: 360px;
+  max-width: 380px;
   margin: 0 auto;
-  padding: 80px 24px 24px;
+  padding: 60px 24px 24px;
 }
 
-.auth h1 {
-  text-align: center;
-  font-size: 32px;
-  margin: 0 0 8px;
-  color: var(--accent);
+.auth-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 32px;
 }
 
-.auth h2 {
-  text-align: center;
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0 0 32px;
+.auth-brand img {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+}
+
+.auth-brand h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #5865f2, #a660e8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.auth-brand h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 400;
   color: var(--text-dim);
 }
 
@@ -136,114 +153,28 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
 }
 
 .auth button {
-  margin-top: 8px;
+  margin-top: 4px;
 }
 
 .auth p {
   text-align: center;
-  margin-top: 24px;
+  margin-top: 20px;
   color: var(--text-dim);
   font-size: 14px;
 }
 
-/* Rooms page */
+/* ── Rooms page (legacy, kept for compat) ── */
 .rooms {
   max-width: 720px;
   margin: 0 auto;
   padding: 24px;
-}
-
-.rooms header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
-}
-
-.rooms header h1 {
-  margin: 0;
-  font-size: 24px;
-}
-
-.rooms .user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.rooms .user span {
-  color: var(--text-dim);
-}
-
-.rooms .user button {
-  background: transparent;
-  color: var(--text-dim);
-  padding: 6px 12px;
-  font-size: 13px;
-}
-
-.rooms .user button:hover {
-  background: var(--surface-hover);
-  color: var(--text);
-}
-
-.create-room {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-
-.create-room input {
-  flex: 1;
-}
-
-.room-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.room-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  background: var(--surface);
-  border-radius: 8px;
-  border: 1px solid var(--border);
-}
-
-.room-list li:hover {
-  background: var(--surface-hover);
-}
-
-.room-list strong {
-  display: block;
-  font-size: 16px;
-  margin-bottom: 4px;
-}
-
-.room-list .members {
-  font-size: 13px;
-  color: var(--text-dim);
-}
-
-.room-list .members.online {
-  color: #3ba55d;
-  font-weight: 600;
-}
-
-.room-list .members.online::before {
-  content: "● ";
-  font-size: 10px;
 }
 
 .empty {
@@ -252,9 +183,9 @@ a:hover {
   padding: 48px 0;
 }
 
-/* Room page */
+/* ── Room page ── */
 .room {
-  max-width: 720px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 24px;
   display: flex;
@@ -271,19 +202,33 @@ a:hover {
   border-bottom: 1px solid var(--border);
 }
 
-.room header button {
+.room-back-btn {
   background: transparent;
   color: var(--text-dim);
+  padding: 6px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
-.room header button:hover {
+.room-back-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
   color: var(--text);
 }
 
 .room header h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
   flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-voice-icon {
+  color: var(--text-dim);
+  font-size: 16px;
 }
 
 .room .conn {
@@ -293,31 +238,34 @@ a:hover {
   background: var(--surface);
   color: var(--text-dim);
   text-transform: lowercase;
+  border: 1px solid var(--border);
 }
 
 .room .conn-connected {
-  background: rgba(59, 165, 93, 0.15);
-  color: #3ba55d;
+  background: rgba(59, 165, 93, 0.12);
+  color: var(--green);
+  border-color: rgba(59, 165, 93, 0.3);
 }
 
 .room .conn-connecting,
 .room .conn-reconnecting {
-  background: rgba(237, 178, 66, 0.15);
+  background: rgba(237, 178, 66, 0.12);
   color: #edb242;
+  border-color: rgba(237, 178, 66, 0.3);
 }
 
 .room .participants {
   flex: 1;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .room .participants h2 {
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   color: var(--text-dim);
-  margin: 0 0 12px;
+  margin: 0 0 10px;
 }
 
 .room .participants ul {
@@ -336,53 +284,93 @@ a:hover {
   padding: 10px 14px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  transition: border-color 0.15s;
+  border-radius: 8px;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+@keyframes speaking-ring {
+  0%, 100% { box-shadow: 0 0 0 2px var(--green); }
+  50% { box-shadow: 0 0 0 4px rgba(59, 165, 93, 0.25); }
 }
 
 .room .participants li.speaking {
-  border-color: #3ba55d;
-  box-shadow: 0 0 0 1px #3ba55d;
+  border-color: var(--green);
+  animation: speaking-ring 1.2s ease-in-out infinite;
+}
+
+.participant-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  color: #fff;
+  flex-shrink: 0;
+  letter-spacing: 0;
 }
 
 .mic-state {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   padding: 2px 8px;
   border-radius: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  min-width: 60px;
+  min-width: 56px;
   text-align: center;
 }
 
 .mic-state.live {
   background: rgba(59, 165, 93, 0.15);
-  color: #3ba55d;
+  color: var(--green);
 }
 
 .mic-state.muted {
-  background: rgba(237, 66, 69, 0.15);
+  background: rgba(237, 66, 69, 0.12);
   color: var(--danger);
 }
 
-.room .participants .name {
-  font-size: 14px;
+.participant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.room .participants .you {
+.participant-name {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.participant-you {
+  font-size: 11px;
   color: var(--text-dim);
-  font-size: 12px;
 }
 
 .room .controls {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
   padding: 16px;
   background: var(--surface);
-  border-radius: 8px;
+  border-radius: 10px;
   border: 1px solid var(--border);
+}
+
+.controls-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.controls-section:last-child {
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 .mic-level {
@@ -394,34 +382,43 @@ a:hover {
 }
 
 .mic-level > span {
-  min-width: 72px;
+  min-width: 80px;
+  font-size: 12px;
 }
 
 .mic-meter {
   flex: 1;
-  height: 8px;
+  height: 6px;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .mic-meter-bar {
   height: 100%;
   width: 0%;
-  background: linear-gradient(to right, #3ba55d 0%, #3ba55d 70%, #edb242 85%, var(--danger) 100%);
+  background: linear-gradient(to right, var(--green) 0%, var(--green) 70%, #edb242 85%, var(--danger) 100%);
   transition: width 0.05s linear;
 }
 
-.room .controls .mic-toggle {
+.mic-toggle {
   width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  border-radius: 8px;
 }
 
-.room .controls .mic-toggle.muted {
+.mic-toggle.muted {
   background: var(--danger);
 }
 
-.room .controls .mic-toggle.muted:hover:not(:disabled) {
+.mic-toggle.muted:hover:not(:disabled) {
   background: #c0383a;
 }
 
@@ -434,7 +431,8 @@ a:hover {
 }
 
 .room .controls label > span {
-  min-width: 72px;
+  min-width: 80px;
+  font-size: 12px;
 }
 
 .room .controls input[type="range"] {
@@ -479,9 +477,11 @@ a:hover {
   padding: 10px 0;
   gap: 6px;
   overflow-y: auto;
+  overflow-x: visible;
 }
 
 .server-icon {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -491,9 +491,57 @@ a:hover {
   font-weight: 700;
   border: none;
   cursor: pointer;
-  transition: border-radius 0.15s, background 0.15s;
+  transition: border-radius 0.2s, background 0.15s;
   flex-shrink: 0;
   padding: 0;
+}
+
+.server-icon::before {
+  content: "";
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%) scaleY(0);
+  width: 4px;
+  height: 0;
+  background: #fff;
+  border-radius: 0 4px 4px 0;
+  transition: height 0.15s, transform 0.15s;
+}
+
+.server-icon:hover::before {
+  height: 20px;
+  transform: translateY(-50%) scaleY(1);
+}
+
+.server-icon.active::before {
+  height: 36px;
+  transform: translateY(-50%) scaleY(1);
+}
+
+/* Tooltip */
+.server-icon[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 16px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: #18191c;
+  color: #fff;
+  padding: 7px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s;
+  z-index: 200;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.server-icon[data-tooltip]:hover::after {
+  opacity: 1;
 }
 
 .server-icon:hover:not(:disabled) {
@@ -515,9 +563,10 @@ a:hover {
 }
 
 .server-icon.add-server:hover:not(:disabled) {
-  border-color: #3ba55d;
-  color: #3ba55d;
+  border-color: var(--green);
+  color: var(--green);
   background: transparent;
+  border-radius: 30%;
 }
 
 .sidebar-divider {
@@ -571,13 +620,43 @@ a:hover {
 
 .server-page header h1 {
   margin: 0;
-  font-size: 22px;
+  font-size: 20px;
+  font-weight: 700;
 }
 
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.user-name {
+  font-size: 13px;
+  color: var(--text-dim);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .invite-box {
@@ -598,8 +677,86 @@ a:hover {
   border-radius: 4px;
   font-family: monospace;
   font-size: 15px;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   color: var(--accent);
+}
+
+.create-room {
+  display: flex;
+  gap: 8px;
+}
+
+.create-room input {
+  flex: 1;
+}
+
+.room-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.room-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--surface);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  transition: background 0.12s, border-color 0.12s;
+  cursor: pointer;
+}
+
+.room-list li:hover {
+  background: var(--surface-hover);
+  border-color: #4a4d56;
+}
+
+.room-list-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-list-icon {
+  font-size: 16px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+.room-list-info strong {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.room-list-info .members {
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.room-list-info .members.online {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.room-list-info .members.online::before {
+  content: "●";
+  font-size: 8px;
+}
+
+.room-list li button {
+  padding: 6px 14px;
+  font-size: 13px;
+  flex-shrink: 0;
 }
 
 .btn-secondary {
@@ -622,11 +779,11 @@ a:hover {
   background: rgba(237, 66, 69, 0.1);
 }
 
-/* Modal */
+/* ── Modal ── */
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.7);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -676,9 +833,9 @@ a:hover {
 }
 
 .choice-icon {
-  font-size: 22px;
-  width: 36px;
-  height: 36px;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
   background: var(--surface);
   border-radius: 50%;
   display: flex;

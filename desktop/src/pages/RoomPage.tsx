@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   ConnectionState,
   LocalAudioTrack,
@@ -21,8 +21,27 @@ interface ParticipantState {
   isMuted: boolean;
 }
 
+const AVATAR_COLORS = [
+  "#5865f2", "#3ba55d", "#faa61a", "#ed4245",
+  "#00b0f4", "#a660e8", "#f47b67", "#43b581",
+];
+
+function avatarBg(identity: string): string {
+  let hash = 0;
+  for (const c of identity) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function avatarInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
 export function RoomPage() {
   const { serverId, roomId } = useParams<{ serverId: string; roomId: string }>();
+  const { state: navState } = useLocation();
+  const roomName: string = navState?.roomName ?? "Sala";
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -36,9 +55,7 @@ export function RoomPage() {
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [localMicTrack, setLocalMicTrack] = useState<MediaStreamTrack | null>(
-    null
-  );
+  const [localMicTrack, setLocalMicTrack] = useState<MediaStreamTrack | null>(null);
   const [reconnectKey, setReconnectKey] = useState(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -140,9 +157,7 @@ export function RoomPage() {
         await room.localParticipant.setMicrophoneEnabled(true);
         if (cancelled) return;
 
-        const micPub = room.localParticipant.getTrackPublication(
-          Track.Source.Microphone
-        );
+        const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         const micTrack = micPub?.track as LocalAudioTrack | undefined;
         if (micTrack) setLocalMicTrack(micTrack.mediaStreamTrack);
 
@@ -162,9 +177,7 @@ export function RoomPage() {
         snapshot();
       } catch (err) {
         if (!cancelled) {
-          setError(
-            err instanceof Error ? err.message : "Erro ao conectar na sala"
-          );
+          setError(err instanceof Error ? err.message : "Erro ao conectar na sala");
         }
       }
     })();
@@ -197,9 +210,7 @@ export function RoomPage() {
       await room.switchActiveDevice("audioinput", deviceId);
       setSelectedDevice(deviceId);
       localStorage.setItem("lobby_mic_device", deviceId);
-      const micPub = room.localParticipant.getTrackPublication(
-        Track.Source.Microphone
-      );
+      const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       const micTrack = micPub?.track as LocalAudioTrack | undefined;
       setLocalMicTrack(micTrack?.mediaStreamTrack ?? null);
     } catch (err) {
@@ -211,9 +222,7 @@ export function RoomPage() {
     setVolume(v);
     document
       .querySelectorAll<HTMLAudioElement>("audio[data-lk-source]")
-      .forEach((el) => {
-        el.volume = v;
-      });
+      .forEach((el) => { el.volume = v; });
     const room = roomRef.current;
     if (!room) return;
     room.remoteParticipants.forEach((p) => p.setVolume(v));
@@ -230,8 +239,13 @@ export function RoomPage() {
   return (
     <main className="room">
       <header>
-        <button onClick={() => navigate(`/servers/${serverId}`)}>← Sair</button>
-        <h1>Sala</h1>
+        <button className="room-back-btn" onClick={() => navigate(`/servers/${serverId}`)}>
+          ← Voltar
+        </button>
+        <h1>
+          <span className="room-voice-icon">🔊</span>
+          {roomName}
+        </h1>
         <span className={`conn conn-${connectionState}`}>
           {connLabel[connectionState]}
         </span>
@@ -241,8 +255,7 @@ export function RoomPage() {
 
       {(connectionState === ConnectionState.Reconnecting ||
         connectionState === ConnectionState.SignalReconnecting ||
-        (connectionState === ConnectionState.Disconnected &&
-          reconnectKey > 0)) && (
+        (connectionState === ConnectionState.Disconnected && reconnectKey > 0)) && (
         <p className="reconnecting">Reconectando, aguarde...</p>
       )}
 
@@ -253,16 +266,21 @@ export function RoomPage() {
         ) : (
           <ul>
             {participants.map((p) => (
-              <li
-                key={p.identity}
-                className={p.isSpeaking ? "speaking" : undefined}
-              >
+              <li key={p.identity} className={p.isSpeaking ? "speaking" : undefined}>
+                <div
+                  className="participant-avatar"
+                  style={{ background: avatarBg(p.identity) }}
+                >
+                  {avatarInitials(p.name)}
+                </div>
+                <div className="participant-info">
+                  <span className="participant-name">
+                    {p.name}
+                    {p.isLocal && <span className="participant-you"> (você)</span>}
+                  </span>
+                </div>
                 <span className={`mic-state ${p.isMuted ? "muted" : "live"}`}>
                   {p.isMuted ? "mudo" : "ao vivo"}
-                </span>
-                <span className="name">
-                  {p.name}
-                  {p.isLocal && <span className="you"> (você)</span>}
                 </span>
               </li>
             ))}
@@ -271,45 +289,47 @@ export function RoomPage() {
       </section>
 
       <section className="controls">
-        <div className="mic-level">
-          <span>Nível do microfone</span>
-          <MicMeter track={localMicTrack} muted={isMicMuted} />
+        <div className="controls-section">
+          <div className="mic-level">
+            <span>Microfone</span>
+            <MicMeter track={localMicTrack} muted={isMicMuted} />
+          </div>
+          <button
+            onClick={toggleMute}
+            className={`mic-toggle ${isMicMuted ? "muted" : ""}`}
+            disabled={connectionState !== ConnectionState.Connected}
+          >
+            {isMicMuted ? "🎙️ Ativar microfone" : "🔇 Silenciar microfone"}
+          </button>
         </div>
 
-        <button
-          onClick={toggleMute}
-          className={`mic-toggle ${isMicMuted ? "muted" : ""}`}
-          disabled={connectionState !== ConnectionState.Connected}
-        >
-          {isMicMuted ? "Ativar microfone" : "Silenciar microfone"}
-        </button>
-
-        <label>
-          <span>Volume</span>
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.01"
-            value={volume}
-            onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
-          />
-        </label>
-
-        <label>
-          <span>Microfone</span>
-          <select
-            value={selectedDevice}
-            onChange={(e) => handleDeviceChange(e.target.value)}
-            disabled={audioDevices.length === 0}
-          >
-            {audioDevices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label || "Microfone sem nome"}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="controls-section">
+          <label>
+            <span>Volume</span>
+            <input
+              type="range"
+              min="0"
+              max="1"
+              step="0.01"
+              value={volume}
+              onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
+            />
+          </label>
+          <label>
+            <span>Dispositivo</span>
+            <select
+              value={selectedDevice}
+              onChange={(e) => handleDeviceChange(e.target.value)}
+              disabled={audioDevices.length === 0}
+            >
+              {audioDevices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || "Microfone sem nome"}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
     </main>
   );

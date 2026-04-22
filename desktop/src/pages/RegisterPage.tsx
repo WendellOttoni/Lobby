@@ -17,7 +17,7 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register(username, email, password);
-      navigate("/rooms");
+      navigate("/servers");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar");
     } finally {
@@ -27,8 +27,12 @@ export function RegisterPage() {
 
   return (
     <main className="auth">
-      <h1>Lobby</h1>
-      <h2>Criar conta</h2>
+      <div className="auth-brand">
+        <img src="/logo.png" alt="Lobby" />
+        <h1>Lobby</h1>
+        <h2>Criar nova conta</h2>
+      </div>
+
       <form onSubmit={onSubmit}>
         <input
           type="text"
@@ -60,6 +64,7 @@ export function RegisterPage() {
           {submitting ? "Cadastrando..." : "Cadastrar"}
         </button>
       </form>
+
       <p>
         Já tem conta? <Link to="/login">Entrar</Link>
       </p>
