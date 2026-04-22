@@ -477,7 +477,7 @@ a:hover {
   padding: 10px 0;
   gap: 6px;
   overflow-y: auto;
-  overflow-x: visible;
+  overflow-x: hidden;
 }
 
 .server-icon {
@@ -519,30 +519,6 @@ a:hover {
   transform: translateY(-50%) scaleY(1);
 }
 
-/* Tooltip */
-.server-icon[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  left: calc(100% + 16px);
-  top: 50%;
-  transform: translateY(-50%);
-  background: #18191c;
-  color: #fff;
-  padding: 7px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.1s;
-  z-index: 200;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
-}
-
-.server-icon[data-tooltip]:hover::after {
-  opacity: 1;
-}
 
 .server-icon:hover:not(:disabled) {
   background: var(--accent);
