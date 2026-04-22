@@ -5,17 +5,23 @@ interface Props {
   muted: boolean;
 }
 
+const SEGMENTS = 20;
+const GREEN_THRESHOLD = 14;
+const YELLOW_THRESHOLD = 17;
+
 export function MicMeter({ track, muted }: Props) {
-  const barRef = useRef<HTMLDivElement>(null);
+  const segRefs = useRef<(HTMLSpanElement | null)[]>([]);
+
+  function setLevel(level: number) {
+    const activeCount = Math.round((level / 100) * SEGMENTS);
+    segRefs.current.forEach((s, i) => {
+      if (s) s.dataset.active = i < activeCount ? "true" : "false";
+    });
+  }
 
   useEffect(() => {
-    const bar = barRef.current;
-    if (!bar) return;
-
-    if (!track || muted) {
-      bar.style.width = "0%";
-      return;
-    }
+    setLevel(0);
+    if (!track || muted) return;
 
     let cancelled = false;
     let raf = 0;
@@ -36,15 +42,11 @@ export function MicMeter({ track, muted }: Props) {
         const v = Math.abs(buffer[i] - 128);
         if (v > peak) peak = v;
       }
-      const level = Math.min(100, (peak / 128) * 100 * 2.2);
-      if (bar) bar.style.width = `${level}%`;
+      setLevel(Math.min(100, (peak / 128) * 100 * 2.2));
       raf = requestAnimationFrame(tick);
     };
 
-    const start = () => {
-      if (cancelled) return;
-      raf = requestAnimationFrame(tick);
-    };
+    const start = () => { if (!cancelled) raf = requestAnimationFrame(tick); };
 
     if (audioCtx.state === "suspended") {
       audioCtx.resume().then(start).catch(start);
@@ -55,16 +57,21 @@ export function MicMeter({ track, muted }: Props) {
     return () => {
       cancelled = true;
       cancelAnimationFrame(raf);
-      try {
-        source.disconnect();
-      } catch {}
+      try { source.disconnect(); } catch {}
       audioCtx.close().catch(() => {});
     };
   }, [track, muted]);
 
   return (
     <div className="mic-meter">
-      <div className="mic-meter-bar" ref={barRef} />
+      {Array.from({ length: SEGMENTS }, (_, i) => (
+        <span
+          key={i}
+          ref={(el) => { segRefs.current[i] = el; }}
+          className={`mic-seg ${i < GREEN_THRESHOLD ? "seg-green" : i < YELLOW_THRESHOLD ? "seg-yellow" : "seg-red"}`}
+          data-active="false"
+        />
+      ))}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { api, Room, Server } from "../lib/api";
 
 export function ServerPage() {
   const { serverId } = useParams<{ serverId: string }>();
-  const { user, token, logout } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
 
   const [server, setServer] = useState<Server | null>(null);
@@ -79,10 +79,6 @@ export function ServerPage() {
     });
   }
 
-  const userInitials = user?.username
-    ? user.username.slice(0, 2).toUpperCase()
-    : "?";
-
   if (loading) return <div className="server-loading">Carregando...</div>;
 
   return (
@@ -93,13 +89,6 @@ export function ServerPage() {
           <button className="btn-secondary" onClick={() => setShowInvite(!showInvite)}>
             Convidar
           </button>
-          <div className="user-info">
-            <div className="user-avatar">{userInitials}</div>
-            <span className="user-name">{user?.username}</span>
-            <button className="btn-secondary" onClick={logout} style={{ padding: "6px 12px", fontSize: "13px" }}>
-              Sair
-            </button>
-          </div>
         </div>
       </header>
 

@@ -6,7 +6,7 @@ import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
 
 export function ServersLayout() {
-  const { token } = useAuth();
+  const { token, user, logout } = useAuth();
   const navigate = useNavigate();
   const { serverId } = useParams<{ serverId: string }>();
   const [servers, setServers] = useState<Server[]>([]);
@@ -44,7 +44,12 @@ export function ServersLayout() {
 
   return (
     <div className="app-layout">
-      <ServerSidebar servers={servers} onAdd={() => setShowModal(true)} />
+      <ServerSidebar
+        servers={servers}
+        onAdd={() => setShowModal(true)}
+        user={user}
+        onLogout={logout}
+      />
 
       <div className="app-main">
         {loaded && servers.length === 0 ? (
