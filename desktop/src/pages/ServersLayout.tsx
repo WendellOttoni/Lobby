@@ -58,7 +58,9 @@ export function ServersLayout() {
             <button onClick={() => setShowModal(true)}>Criar ou entrar em um</button>
           </div>
         ) : (
-          <Outlet context={{ servers, reloadServers: loadServers }} />
+          <main className="server-page">
+            <Outlet context={{ servers, reloadServers: loadServers }} />
+          </main>
         )}
       </div>
 

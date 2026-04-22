@@ -1,9 +1,11 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import websocket from "@fastify/websocket";
 import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
 import serversRoutes from "./routes/servers.js";
+import chatRoutes from "./routes/chat.js";
 
 const fastify = Fastify({
   logger: {
@@ -35,9 +37,11 @@ fastify.register(cors, {
   credentials: true,
 });
 
+fastify.register(websocket);
 fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });
 fastify.register(serversRoutes, { prefix: "/servers" });
+fastify.register(chatRoutes);
 
 fastify.get("/health", async () => ({ status: "ok" }));
 

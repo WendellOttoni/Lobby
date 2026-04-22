@@ -16,6 +16,7 @@ model User {
   ownedServers      Server[]       @relation("ServerOwner")
   serverMemberships ServerMember[]
   roomMemberships   RoomMember[]
+  messages          Message[]
 }
 
 model Server {
@@ -25,9 +26,10 @@ model Server {
   ownerId    String
   createdAt  DateTime @default(now())
 
-  owner   User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members ServerMember[]
-  rooms   Room[]
+  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  ServerMember[]
+  rooms    Room[]
+  messages Message[]
 }
 
 model ServerMember {
@@ -63,4 +65,17 @@ model RoomMember {
   room Room @relation(fields: [roomId], references: [id], onDelete: Cascade)
 
   @@unique([userId, roomId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  authorId  String
+  serverId  String
+
+  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
 }

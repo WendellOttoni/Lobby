@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { api, Room, Server } from "../lib/api";
+import { ChatPanel } from "../components/ChatPanel";
 
 export function ServerPage() {
   const { serverId } = useParams<{ serverId: string }>();
@@ -82,70 +83,99 @@ export function ServerPage() {
   if (loading) return <div className="server-loading">Carregando...</div>;
 
   return (
-    <main className="server-page">
-      <header>
-        <h1>{server?.name ?? "Servidor"}</h1>
-        <div className="header-actions">
-          <button className="btn-secondary" onClick={() => setShowInvite(!showInvite)}>
+    <div className="server-content">
+      {/* Coluna esquerda — salas de voz */}
+      <div className="rooms-column">
+        <div className="rooms-column-header">
+          <h1>{server?.name ?? "Servidor"}</h1>
+          <button
+            className="btn-secondary"
+            onClick={() => setShowInvite(!showInvite)}
+            style={{ padding: "6px 12px", fontSize: "12px" }}
+          >
             Convidar
           </button>
         </div>
-      </header>
 
-      {showInvite && (
-        <div className="invite-box">
-          <span>Código de convite:</span>
-          <code>{inviteCode}</code>
-          <button
-            onClick={() => navigator.clipboard.writeText(inviteCode)}
-            className="btn-secondary"
-          >
-            Copiar
-          </button>
-          {server?.ownerId === user?.id && (
-            <button onClick={handleResetInvite} className="btn-danger-outline">
-              Resetar
+        {showInvite && (
+          <div className="invite-box">
+            <span>Código:</span>
+            <code>{inviteCode}</code>
+            <button
+              onClick={() => navigator.clipboard.writeText(inviteCode)}
+              className="btn-secondary"
+              style={{ padding: "4px 10px", fontSize: "12px" }}
+            >
+              Copiar
             </button>
-          )}
-        </div>
-      )}
-
-      <form className="create-room" onSubmit={onCreateRoom}>
-        <input
-          placeholder="Nome da nova sala de voz..."
-          value={newRoomName}
-          onChange={(e) => setNewRoomName(e.target.value)}
-          maxLength={64}
-        />
-        <button type="submit" disabled={!newRoomName.trim()}>
-          Criar sala
-        </button>
-      </form>
-
-      {error && <p className="error">{error}</p>}
-
-      {rooms.length === 0 ? (
-        <p className="empty">Nenhuma sala ainda. Crie a primeira!</p>
-      ) : (
-        <ul className="room-list">
-          {rooms.map((room) => (
-            <li key={room.id} onClick={() => enterRoom(room)}>
-              <div className="room-list-left">
-                <span className="room-list-icon">🔊</span>
-                <div className="room-list-info">
-                  <strong>{room.name}</strong>
-                  <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
-                    {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
-                  </span>
-                </div>
-              </div>
-              <button onClick={(e) => { e.stopPropagation(); enterRoom(room); }}>
-                Entrar
+            {server?.ownerId === user?.id && (
+              <button
+                onClick={handleResetInvite}
+                className="btn-danger-outline"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+              >
+                Resetar
               </button>
-            </li>
-          ))}
+            )}
+          </div>
+        )}
+
+        <form onSubmit={onCreateRoom} style={{ display: "flex", gap: "6px" }}>
+          <input
+            placeholder="Nova sala..."
+            value={newRoomName}
+            onChange={(e) => setNewRoomName(e.target.value)}
+            maxLength={64}
+            style={{ fontSize: "13px", padding: "8px 10px" }}
+          />
+          <button
+            type="submit"
+            disabled={!newRoomName.trim()}
+            style={{ padding: "8px 12px", fontSize: "13px", flexShrink: 0 }}
+          >
+            +
+          </button>
+        </form>
+
+        {error && <p className="error" style={{ fontSize: "13px" }}>{error}</p>}
+
+        <ul className="room-list" style={{ gap: "4px" }}>
+          {rooms.length === 0 ? (
+            <p className="empty" style={{ padding: "24px 0", fontSize: "13px" }}>
+              Nenhuma sala ainda.
+            </p>
+          ) : (
+            rooms.map((room) => (
+              <li key={room.id} onClick={() => enterRoom(room)}>
+                <div className="room-list-left">
+                  <span className="room-list-icon">🔊</span>
+                  <div className="room-list-info">
+                    <strong style={{ fontSize: "14px" }}>{room.name}</strong>
+                    <span className={`members ${room.onlineCount > 0 ? "online" : ""}`}>
+                      {room.onlineCount > 0 ? `${room.onlineCount} online` : "vazia"}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={(e) => { e.stopPropagation(); enterRoom(room); }}
+                  style={{ padding: "5px 12px", fontSize: "12px" }}
+                >
+                  Entrar
+                </button>
+              </li>
+            ))
+          )}
         </ul>
+      </div>
+
+      {/* Coluna direita — chat */}
+      {token && user && serverId && (
+        <ChatPanel
+          serverId={serverId}
+          token={token}
+          currentUserId={user.id}
+        />
       )}
-    </main>
+    </div>
   );
 }
