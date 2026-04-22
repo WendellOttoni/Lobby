@@ -102,6 +102,53 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.send({ user });
     }
   );
+
+  fastify.patch(
+    "/me",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const { sub } = request.user as { sub: string };
+      const { username, currentPassword, newPassword } = request.body as {
+        username?: string;
+        currentPassword?: string;
+        newPassword?: string;
+      };
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: sub } });
+
+      const updates: { username?: string; passwordHash?: string } = {};
+
+      if (username && username !== user.username) {
+        const taken = await prisma.user.findUnique({ where: { username } });
+        if (taken) return reply.status(409).send({ error: "Username já em uso" });
+        updates.username = username;
+      }
+
+      if (newPassword) {
+        if (!currentPassword) {
+          return reply.status(400).send({ error: "Senha atual obrigatória" });
+        }
+        const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+        if (!valid) return reply.status(401).send({ error: "Senha atual incorreta" });
+        if (newPassword.length < 6) {
+          return reply.status(400).send({ error: "Nova senha deve ter ao menos 6 caracteres" });
+        }
+        updates.passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return reply.status(400).send({ error: "Nenhuma alteração enviada" });
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: sub },
+        data: updates,
+        select: { id: true, username: true, email: true, createdAt: true },
+      });
+
+      return reply.send({ user: updated });
+    }
+  );
 };
 
 export default authRoutes;

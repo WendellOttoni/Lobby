@@ -6,9 +6,10 @@ interface Props {
   onAdd: () => void;
   user: { username: string; id: string } | null;
   onLogout: () => void;
+  onSettings: () => void;
 }
 
-export function ServerSidebar({ servers, onAdd, user, onLogout }: Props) {
+export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Props) {
   const navigate = useNavigate();
   const { serverId } = useParams<{ serverId: string }>();
 
@@ -45,9 +46,14 @@ export function ServerSidebar({ servers, onAdd, user, onLogout }: Props) {
         <div className="sidebar-user-avatar" title={user?.username ?? ""}>
           {initials}
         </div>
-        <button className="sidebar-logout-btn" onClick={onLogout}>
-          sair
-        </button>
+        <div className="sidebar-user-actions">
+          <button className="sidebar-action-btn" onClick={onSettings} title="Configurações">
+            ⚙
+          </button>
+          <button className="sidebar-logout-btn" onClick={onLogout}>
+            sair
+          </button>
+        </div>
       </div>
     </nav>
   );

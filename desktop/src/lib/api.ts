@@ -133,6 +133,13 @@ export const api = {
       method: "POST",
       token,
     }),
+
+  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string }) =>
+    request<{ user: User }>("/auth/me", {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(data),
+    }),
 };
 
 export { ApiError };

@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
+import { SettingsModal } from "../components/SettingsModal";
 
 export function ServersLayout() {
   const { token, user, logout } = useAuth();
@@ -11,6 +12,7 @@ export function ServersLayout() {
   const { serverId } = useParams<{ serverId: string }>();
   const [servers, setServers] = useState<Server[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   async function loadServers() {
@@ -49,6 +51,7 @@ export function ServersLayout() {
         onAdd={() => setShowModal(true)}
         user={user}
         onLogout={logout}
+        onSettings={() => setShowSettings(true)}
       />
 
       <div className="app-main">
@@ -66,6 +69,10 @@ export function ServersLayout() {
 
       {showModal && (
         <ServerModal onClose={() => setShowModal(false)} onDone={handleModalDone} />
+      )}
+
+      {showSettings && (
+        <SettingsModal onClose={() => setShowSettings(false)} />
       )}
     </div>
   );
