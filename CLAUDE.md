@@ -3,34 +3,59 @@
 ## O que é o Lobby
 
 App de comunicação por voz em tempo real para Windows. Alternativa leve ao Discord e TeamSpeak.
-Foco: voz bem feita, binário pequeno (<10MB), baixo consumo de RAM, servidor próprio.
+Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 
-## MVP — o que entra
+## O que já está shippado (MVP completo + extras)
 
-- Cadastro e login de usuários
-- Criação e listagem de salas privadas
-- Entrada/saída de salas
-- Comunicação por voz em tempo real (WebRTC via LiveKit)
-- Controles: mute, volume, escolha de microfone
-- Lista de participantes online na sala
+**Auth**
+- Cadastro, login e atualização de perfil (username + senha) via JWT
 
-## MVP — o que NÃO entra ainda
+**Servidores (multi-tenant)**
+- Criação de servidor com invite code único
+- Entrar em servidor pelo código
+- Listagem dos servidores do usuário
+- Salas de voz dentro de cada servidor (CRUD)
 
-Chat de texto, vídeo, compartilhamento de tela, push-to-talk global, tray icon, overlay,
-permissões avançadas, moderação, banimento, integrações, bots, notificações push, upload de arquivos.
+**Voz**
+- Entrada/saída de salas com WebRTC via LiveKit
+- Mute/unmute, controle de volume, seleção de microfone
+- Medidor de nível de mic em tempo real
+- Lista de participantes online com cards (avatar por cor, indicador de fala)
+- Menu de contexto por participante (silenciar localmente)
+- Voz persistente: navegar entre páginas sem cair da sala
+
+**Chat de texto**
+- Chat por servidor via WebSocket com persistência em PostgreSQL
+- Histórico carregado ao entrar no servidor
+
+**App desktop (Tauri)**
+- Janela minimiza para o tray em vez de fechar
+- Tray icon com menu "Abrir" e "Sair"
+- Auto-updater: verifica ao iniciar + botão manual em Settings
+- Settings modal: editar conta + verificar atualizações
+- CI publica nova release a cada push no `main` (tag `v0.0.N`)
+
+## O que NÃO entra (fora de escopo atual)
+
+Vídeo, compartilhamento de tela, push-to-talk global hotkey, overlay, permissões avançadas,
+moderação, banimento, bots, notificações push, upload de arquivos.
 
 ## Stack
 
 | Camada | Tecnologia |
 |--------|-----------|
-| Desktop | Tauri + React + TypeScript + Vite |
+| Desktop | Tauri v2 + React + TypeScript + Vite |
 | Voz (cliente) | livekit-client SDK |
 | Backend HTTP | Node.js + Fastify + TypeScript |
 | ORM | Prisma |
 | Banco de dados | PostgreSQL |
-| Cache / presença | Redis |
 | Autenticação | JWT |
-| Servidor de mídia | LiveKit (binário local) |
+| Servidor de mídia | LiveKit (binário local em dev, self-hosted em prod) |
+| Deploy backend | Railway |
+| CI/CD | GitHub Actions — build + release automática |
+
+> Redis listado no plano original mas não está em uso — presença é gerenciada pelo LiveKit.
+> Remover `REDIS_URL` do `.env.example` se ainda estiver lá.
 
 ## Estrutura de pastas
 
@@ -38,67 +63,85 @@ permissões avançadas, moderação, banimento, integrações, bots, notificaç�
 lobby/
 ├── backend/
 │   ├── src/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── db/
+│   │   ├── routes/        # auth.ts | servers.ts | chat.ts
+│   │   ├── services/      # livekit.ts
+│   │   ├── plugins/       # jwt.ts
+│   │   ├── db/            # client.ts (Prisma)
 │   │   └── index.ts
-│   ├── package.json
-│   └── tsconfig.json
+│   ├── prisma/
+│   │   └── schema.prisma
+│   └── package.json
 ├── desktop/
-│   ├── src/                  # Frontend React
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── hooks/
+│   ├── src/
+│   │   ├── components/    # ServerSidebar, ChatPanel, VoiceBar, ParticipantCard, SettingsModal…
+│   │   ├── pages/         # LoginPage, RegisterPage, ServersLayout, ServerPage, RoomPage
+│   │   ├── contexts/      # AuthContext, VoiceContext
+│   │   ├── lib/           # api.ts, avatar.ts
 │   │   └── App.tsx
-│   ├── src-tauri/            # Rust (Tauri core)
-│   │   ├── src/
-│   │   └── Cargo.toml
-│   ├── package.json
-│   └── vite.config.ts
+│   ├── src-tauri/
+│   │   ├── src/lib.rs     # tray icon + auto-updater
+│   │   ├── capabilities/  # default.json (permissões Tauri v2)
+│   │   └── tauri.conf.json
+│   └── package.json
 ├── livekit/
+│   ├── livekit-server.exe
 │   └── livekit.yaml
-├── docs/
-│   └── arquitetura.md
-├── .gitignore
-├── README.md
+├── .github/workflows/
+│   └── build.yml          # CI: build + tag + release + prune
 └── CLAUDE.md
 ```
 
 ## Fluxo de uma chamada de voz
 
-1. App faz login no backend Node → recebe JWT de sessão
-2. Usuário entra em sala → backend valida no Postgres → gera token LiveKit assinado
-3. App conecta diretamente no LiveKit via WebRTC usando o token
-4. LiveKit roteia o áudio entre todos os participantes da sala
+1. App faz login no backend → recebe JWT
+2. Usuário entra em sala → backend gera token LiveKit assinado
+3. App conecta no LiveKit via WebRTC usando o token
+4. LiveKit roteia o áudio; presença dos participantes vem via eventos do SDK
 
-## Variáveis de ambiente
+## Fluxo do auto-updater
 
-Todas as variáveis sensíveis ficam em `.env` (nunca commitar).
-Use `.env.example` como referência das variáveis necessárias sem valores reais.
+1. No startup, `lib.rs` verifica o endpoint `releases/latest/download/latest.json`
+2. Se há versão nova, baixa e instala em background → reinicia o app
+3. Botão "Verificar atualização" em Settings chama `check()` do frontend (requer `updater:default` + `process:default` nas capabilities)
+4. CI publica `latest.json` + `.sig` a cada release (`bundle.createUpdaterArtifacts: true`)
 
-Variáveis esperadas no backend:
+## Schema do banco (Prisma)
+
+- `User` — id, username, email, passwordHash
+- `Server` — id, name, inviteCode, ownerId
+- `ServerMember` — userId + serverId + role (unique pair)
+- `Room` — id, name, serverId
+- `RoomMember` — userId + roomId (unique pair, usado para presença)
+- `Message` — id, content, authorId, serverId, createdAt (index em serverId+createdAt)
+
+## Variáveis de ambiente (backend)
+
 - `DATABASE_URL` — string de conexão PostgreSQL
-- `REDIS_URL` — string de conexão Redis
-- `JWT_SECRET` — segredo para assinar tokens JWT
+- `JWT_SECRET` — segredo para assinar tokens
 - `LIVEKIT_API_KEY` — chave da API do LiveKit
 - `LIVEKIT_API_SECRET` — segredo da API do LiveKit
-- `LIVEKIT_URL` — URL do servidor LiveKit (ex: ws://localhost:7880)
+- `LIVEKIT_URL` — URL do servidor LiveKit (ex: `ws://localhost:7880`)
+- `PORT` — porta HTTP (padrão: 3000)
+- `CORS_ORIGINS` — origens extras permitidas no CORS, separadas por vírgula (opcional)
+
+## Secrets do CI (GitHub)
+
+- `TAURI_SIGNING_PRIVATE_KEY` — chave privada para assinar os artefatos de update
+- `VITE_API_URL` — URL do backend injetada no build do frontend
 
 ## Convenções de código
 
-- TypeScript estrito em todo o projeto (backend e frontend)
-- Sem `any` explícito — usar tipos corretos ou `unknown`
+- TypeScript estrito em todo o projeto — sem `any` explícito
 - Sem comentários que descrevem o que o código faz — só o porquê quando não for óbvio
 - Imports absolutos no backend (`src/` como base)
 - Componentes React em PascalCase, hooks em camelCase com prefixo `use`
 - Rotas Fastify organizadas por domínio em `src/routes/`
+- Versão do app é sempre sobrescrita pelo CI para `0.0.${run_number}` — não alterar manualmente
 
-## Sprints
+## Próximas possibilidades (Sprint 6+)
 
-- **Sprint 0** — Ambiente (Rust, Node, Postgres, Redis, LiveKit instalados)
-- **Sprint 1** — Backend base: Fastify + Prisma + cadastro/login com JWT ← *estamos aqui*
-- **Sprint 2** — Salas: CRUD + geração de token LiveKit
-- **Sprint 3** — App Tauri base: login, lista de salas
-- **Sprint 4** — Voz: integração LiveKit SDK, lista de participantes, controles
-- **Sprint 5** — Polimento MVP: presença online, logout, empacotamento .msi
-- **Sprint 6+** — Push-to-talk global, tray, auto-start, deploy real
+- Push-to-talk global (hotkey de sistema via Tauri)
+- Auto-start com o Windows
+- Permissões por sala (owner pode moderar)
+- Notificações de desktop quando alguém entra em sala
+- Overlay flutuante sobre outros apps
