@@ -11,6 +11,8 @@ interface Props {
 
 type UpdateStatus = "idle" | "checking" | "latest" | "downloading" | "error";
 
+const UPDATER_KEYWORDS = ["network", "connect", "dns", "timeout", "resolve", "offline"];
+
 export function SettingsModal({ onClose }: Props) {
   const { user, token, setUser } = useAuth();
 
@@ -21,6 +23,7 @@ export function SettingsModal({ onClose }: Props) {
   const [saveMsg, setSaveMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
 
   async function loadVersion() {
@@ -58,6 +61,7 @@ export function SettingsModal({ onClose }: Props) {
 
   async function handleCheckUpdate() {
     setUpdateStatus("checking");
+    setUpdateError(null);
     try {
       const update = await check();
       if (!update) {
@@ -67,7 +71,10 @@ export function SettingsModal({ onClose }: Props) {
       setUpdateStatus("downloading");
       await update.downloadAndInstall();
       await relaunch();
-    } catch {
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[updater] check failed:", msg);
+      setUpdateError(msg);
       setUpdateStatus("error");
     }
   }
@@ -152,9 +159,18 @@ export function SettingsModal({ onClose }: Props) {
                 {updateLabel[updateStatus]}
               </button>
               {updateStatus === "error" && (
-                <p className="error" style={{ marginTop: 8, fontSize: 13 }}>
-                  Certifique-se de estar conectado à internet.
-                </p>
+                <div style={{ marginTop: 8 }}>
+                  <p className="error" style={{ fontSize: 13, marginBottom: 4 }}>
+                    {updateError && UPDATER_KEYWORDS.some((k) => updateError.toLowerCase().includes(k))
+                      ? "Sem conexão com o servidor de atualizações. Verifique sua internet."
+                      : "Falha ao verificar atualização."}
+                  </p>
+                  {updateError && (
+                    <p style={{ fontSize: 11, opacity: 0.6, wordBreak: "break-word" }}>
+                      {updateError}
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </section>

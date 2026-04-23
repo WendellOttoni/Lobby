@@ -48,12 +48,24 @@ pub fn run() {
 
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if let Ok(updater) = tauri_plugin_updater::UpdaterExt::updater(&handle) {
-                    if let Ok(Some(update)) = updater.check().await {
-                        if let Ok(()) = update.download_and_install(|_, _| {}, || {}).await {
-                            handle.restart();
-                        }
+                let updater = match tauri_plugin_updater::UpdaterExt::updater(&handle) {
+                    Ok(u) => u,
+                    Err(e) => {
+                        eprintln!("[updater] init failed: {e}");
+                        return;
                     }
+                };
+                match updater.check().await {
+                    Ok(Some(update)) => {
+                        eprintln!("[updater] update available: {}", update.version);
+                        if let Err(e) = update.download_and_install(|_, _| {}, || {}).await {
+                            eprintln!("[updater] install failed: {e}");
+                            return;
+                        }
+                        handle.restart();
+                    }
+                    Ok(None) => eprintln!("[updater] already on latest version"),
+                    Err(e) => eprintln!("[updater] check failed: {e}"),
                 }
             });
 
