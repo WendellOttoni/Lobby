@@ -40,7 +40,6 @@ export function ServerPage() {
   useEffect(() => {
     if (!token || !serverId) return;
     setLoading(true);
-    setServer(null);
 
     Promise.all([
       api.getServer(token, serverId),
@@ -50,6 +49,7 @@ export function ServerPage() {
         setServer(server);
         setRooms(rooms);
         setInviteCode(server.inviteCode);
+        setError(null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Erro"))
       .finally(() => setLoading(false));
@@ -131,7 +131,7 @@ export function ServerPage() {
     await voice.connect(token, serverId, room.id, room.name);
   }
 
-  if (loading) return <div className="server-loading">Carregando...</div>;
+  if (loading && !server) return <div className="server-loading">Carregando...</div>;
 
   return (
     <div className="server-content">

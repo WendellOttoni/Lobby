@@ -41,10 +41,15 @@ fn detect_game() -> Option<String> {
     .into_iter()
     .collect();
 
-    let output = std::process::Command::new("tasklist")
-        .args(["/FO", "CSV", "/NH"])
-        .output()
-        .ok()?;
+    let mut cmd = std::process::Command::new("tasklist");
+    cmd.args(["/FO", "CSV", "/NH"]);
+    // Prevent a console window from flashing on screen when spawned from a GUI app
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let output = cmd.output().ok()?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {

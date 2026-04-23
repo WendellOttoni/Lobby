@@ -37,7 +37,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = "0.0.${{ github.run_number }}"
+          $version = "0.1.${{ github.run_number }}"
           $file = "desktop/src-tauri/tauri.conf.json"
           $content = Get-Content $file -Raw
           $content = $content -replace '"version":\s*"[^"]*"', """version"": ""$version"""
