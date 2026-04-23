@@ -45,7 +45,11 @@
       "Bash(cargo check *)",
       "Bash(git push *)",
       "Bash(cargo add *)",
-      "Bash(cargo fetch *)"
+      "Bash(cargo fetch *)",
+      "Bash(git tag *)",
+      "Bash(gh run *)",
+      "Bash(gh release *)",
+      "Bash(gh secret *)"
     ]
   }
 }

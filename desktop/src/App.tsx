@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { VoiceProvider } from "./contexts/VoiceContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -10,9 +11,10 @@ import "./App.css";
 
 function App() {
   return (
-    <AuthProvider>
-      <VoiceProvider>
-        <BrowserRouter>
+    <ErrorBoundary>
+      <AuthProvider>
+        <VoiceProvider>
+          <BrowserRouter>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
@@ -29,8 +31,9 @@ function App() {
             <Route path="*" element={<Navigate to="/servers" replace />} />
           </Routes>
         </BrowserRouter>
-      </VoiceProvider>
-    </AuthProvider>
+        </VoiceProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

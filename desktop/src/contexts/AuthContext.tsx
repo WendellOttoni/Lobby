@@ -5,7 +5,10 @@ import {
   useEffect,
   ReactNode,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { api, User } from "../lib/api";
+
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 interface AuthContextValue {
   user: User | null;
@@ -41,6 +44,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(null);
       })
       .finally(() => setLoading(false));
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+
+    async function tick() {
+      const game = await invoke<string | null>("detect_game").catch(() => null);
+      if (cancelled || !token) return;
+      await api.heartbeat(token, game).catch(() => {});
+    }
+
+    tick();
+    const id = setInterval(tick, HEARTBEAT_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
   }, [token]);
 
   const login = async (email: string, password: string) => {

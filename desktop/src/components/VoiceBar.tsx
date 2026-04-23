@@ -1,111 +1,63 @@
 import { ConnectionState } from "livekit-client";
 import { useVoice } from "../contexts/VoiceContext";
-import { MicMeter } from "./MicMeter";
+import { WaveBars } from "./WaveBars";
+import { Ico } from "./icons";
 
 export function VoiceBar() {
   const {
     activeRoomName,
     connectionState,
     isMuted,
-    isPTTActive,
     isReconnecting,
-    pttKey,
-    localMicTrack,
     participants,
-    volume,
-    audioDevices,
-    selectedDevice,
     toggleMute,
     disconnect,
-    changeDevice,
-    setVolumeAll,
   } = useVoice();
 
   if (!activeRoomName) return null;
 
   const isConnected = connectionState === ConnectionState.Connected;
-  const isConnecting =
-    connectionState === ConnectionState.Connecting ||
-    connectionState === ConnectionState.Reconnecting ||
-    connectionState === ConnectionState.SignalReconnecting;
+  const listenerCount = Math.max(participants.length, 1);
+
+  const statusLabel = isConnected
+    ? `Ao vivo · ${listenerCount} ${listenerCount === 1 ? "ouvindo" : "ouvindo"}`
+    : isReconnecting
+    ? "Reconectando..."
+    : "Conectando...";
 
   return (
-    <div className="voice-bar">
-      <div className="voice-bar-header">
-        <span className={`voice-bar-dot ${isConnected ? "green" : isConnecting || isReconnecting ? "yellow" : "red"}`} />
-        <div className="voice-bar-info">
-          <span className="voice-bar-room">{activeRoomName}</span>
-          <span className="voice-bar-sub">
-            {isReconnecting
-              ? "reconectando..."
-              : isConnected
-              ? `${participants.length} na sala`
-              : isConnecting
-              ? "conectando..."
-              : "desconectado"}
-          </span>
+    <div className="now-playing">
+      <div className="now-playing-top">
+        <div className="now-playing-tile">
+          <Ico.wave />
         </div>
-        <button
-          className="voice-bar-leave"
-          onClick={disconnect}
-          title="Sair da sala de voz"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="voice-bar-meter">
-        <MicMeter track={localMicTrack} muted={isMuted} />
-      </div>
-
-      {isPTTActive && (
-        <div className="voice-bar-ptt-active">
-          🟢 PTT ativo
+        <div className="now-playing-title">
+          <div className="now-playing-name">{activeRoomName}</div>
+          <div className={`now-playing-status${isConnected ? "" : " warn"}`}>
+            <span className="now-playing-status-dot" />
+            {statusLabel}
+          </div>
         </div>
-      )}
-
-      <div className="voice-bar-controls">
+        <WaveBars live={isConnected && !isMuted} color="var(--cyan)" count={5} />
+      </div>
+      <div className="now-playing-actions">
         <button
-          className={`voice-bar-mute ${isMuted ? "muted" : ""}`}
+          className={`now-playing-btn${isMuted ? " muted" : ""}`}
           onClick={toggleMute}
-          title={isMuted ? "Ativar microfone" : "Silenciar"}
           disabled={!isConnected}
+          title={isMuted ? "Ativar microfone" : "Silenciar"}
         >
-          {isMuted ? "🎙️ Ativado" : "🔇 Silenciar"}
+          {isMuted ? <Ico.micOff /> : <Ico.mic />}
+          {isMuted ? "Mutado" : "Falar"}
+        </button>
+        <button
+          className="now-playing-btn-leave"
+          onClick={disconnect}
+          title="Sair da sala"
+        >
+          Sair
         </button>
       </div>
-
-      {pttKey && (
-        <p className="voice-bar-ptt-hint">
-          PTT: <kbd>{pttKey}</kbd>
-        </p>
-      )}
-
-      {audioDevices.length > 0 && (
-        <select
-          className="voice-bar-select"
-          value={selectedDevice}
-          onChange={(e) => changeDevice(e.target.value)}
-        >
-          {audioDevices.map((d) => (
-            <option key={d.deviceId} value={d.deviceId}>
-              {d.label || "Microfone"}
-            </option>
-          ))}
-        </select>
-      )}
-
-      <label className="voice-bar-volume">
-        <span>Vol</span>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={volume}
-          onChange={(e) => setVolumeAll(parseFloat(e.target.value))}
-        />
-      </label>
     </div>
   );
 }

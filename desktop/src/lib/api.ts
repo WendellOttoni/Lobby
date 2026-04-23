@@ -13,6 +13,7 @@ export interface Server {
   inviteCode: string;
   ownerId: string;
   role: string;
+  unreadCount?: number;
   _count?: { members: number; rooms: number };
 }
 
@@ -167,6 +168,9 @@ export const api = {
 
   listMembers: (token: string, serverId: string) =>
     request<{ members: Member[] }>(`/servers/${serverId}/members`, { token }),
+
+  markServerRead: (token: string, serverId: string) =>
+    request<void>(`/servers/${serverId}/read`, { method: "POST", token }),
 };
 
 export { ApiError };

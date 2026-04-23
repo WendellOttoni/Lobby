@@ -78,7 +78,18 @@ function loadJSON<T>(key: string, fallback: T): T {
   }
 }
 
+const NOTIFY_JOIN_KEY = "lobby_notify_join";
+
+export function isNotifyJoinEnabled(): boolean {
+  return localStorage.getItem(NOTIFY_JOIN_KEY) !== "false";
+}
+
+export function setNotifyJoinEnabled(enabled: boolean) {
+  localStorage.setItem(NOTIFY_JOIN_KEY, enabled ? "true" : "false");
+}
+
 async function notifyParticipantJoined(name: string) {
+  if (!isNotifyJoinEnabled()) return;
   try {
     let granted = await isPermissionGranted();
     if (!granted) {

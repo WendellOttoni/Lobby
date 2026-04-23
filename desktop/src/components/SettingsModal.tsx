@@ -4,7 +4,7 @@ import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { enable as autostartEnable, disable as autostartDisable, isEnabled as autostartIsEnabled } from "@tauri-apps/plugin-autostart";
 import { useAuth } from "../contexts/AuthContext";
-import { useVoice } from "../contexts/VoiceContext";
+import { useVoice, isNotifyJoinEnabled, setNotifyJoinEnabled } from "../contexts/VoiceContext";
 import { api, User } from "../lib/api";
 
 interface Props {
@@ -46,6 +46,13 @@ export function SettingsModal({ onClose }: Props) {
 
   const [recordingPTT, setRecordingPTT] = useState(false);
   const [autostart, setAutostart] = useState<boolean | null>(null);
+  const [notifyJoin, setNotifyJoin] = useState(() => isNotifyJoinEnabled());
+
+  function toggleNotifyJoin() {
+    const next = !notifyJoin;
+    setNotifyJoin(next);
+    setNotifyJoinEnabled(next);
+  }
 
   useEffect(() => {
     autostartIsEnabled().then(setAutostart).catch(() => setAutostart(false));
@@ -203,6 +210,15 @@ export function SettingsModal({ onClose }: Props) {
                   disabled={autostart === null}
                 >
                   {autostart ? "Ativado" : "Desativado"}
+                </button>
+              </label>
+              <label className="settings-toggle-row">
+                <span>Notificar quando alguém entrar na sala</span>
+                <button
+                  className={`settings-toggle ${notifyJoin ? "on" : "off"}`}
+                  onClick={toggleNotifyJoin}
+                >
+                  {notifyJoin ? "Ativado" : "Desativado"}
                 </button>
               </label>
             </div>

@@ -51,72 +51,83 @@ export function ServerModal({ onClose, onDone, initialCode }: Props) {
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        {mode === "choose" && (
-          <>
-            <h2>Adicionar servidor</h2>
-            <div className="modal-choices">
-              <button className="choice-btn" onClick={() => setMode("create")}>
-                <span className="choice-icon">+</span>
-                <span>Criar servidor</span>
+        <div className="server-modal">
+          <h2>{mode === "create" ? "Criar servidor" : mode === "join" ? "Entrar com convite" : "Adicionar servidor"}</h2>
+          {mode !== "choose" && !initialCode && (
+            <div className="server-modal-tabs">
+              <button
+                className={`server-modal-tab${mode === "create" ? " active" : ""}`}
+                onClick={() => setMode("create")}
+              >
+                Criar
               </button>
-              <button className="choice-btn" onClick={() => setMode("join")}>
-                <span className="choice-icon">→</span>
-                <span>Entrar com convite</span>
+              <button
+                className={`server-modal-tab${mode === "join" ? " active" : ""}`}
+                onClick={() => setMode("join")}
+              >
+                Entrar
               </button>
             </div>
-          </>
-        )}
+          )}
 
-        {mode === "create" && (
-          <>
-            <h2>Criar servidor</h2>
-            <form onSubmit={handleCreate}>
-              <input
-                placeholder="Nome do servidor"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={64}
-                autoFocus
-                required
-              />
+          {mode === "choose" && (
+            <div className="server-modal-tabs" style={{ marginTop: 8 }}>
+              <button className="server-modal-tab active" onClick={() => setMode("create")}>
+                Criar servidor
+              </button>
+              <button className="server-modal-tab" onClick={() => setMode("join")}>
+                Entrar com convite
+              </button>
+            </div>
+          )}
+
+          {mode === "create" && (
+            <form onSubmit={handleCreate} className="server-modal-form">
+              <label>
+                Nome do servidor
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  maxLength={64}
+                  autoFocus
+                  required
+                />
+              </label>
               {error && <p className="error">{error}</p>}
-              <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setMode("choose")}>
-                  Voltar
+              <div className="server-modal-actions">
+                <button type="button" className="btn-secondary" onClick={onClose}>
+                  Cancelar
                 </button>
                 <button type="submit" disabled={submitting || !name.trim()}>
                   {submitting ? "Criando..." : "Criar"}
                 </button>
               </div>
             </form>
-          </>
-        )}
+          )}
 
-        {mode === "join" && (
-          <>
-            <h2>Entrar com convite</h2>
-            <form onSubmit={handleJoin}>
-              <input
-                placeholder="Código do convite"
-                value={code}
-                onChange={(e) => setCode(e.target.value)}
-                autoFocus
-                required
-              />
+          {mode === "join" && (
+            <form onSubmit={handleJoin} className="server-modal-form">
+              <label>
+                Código do convite
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </label>
               {error && <p className="error">{error}</p>}
-              <div className="modal-actions">
-                {!initialCode && (
-                  <button type="button" className="btn-secondary" onClick={() => setMode("choose")}>
-                    Voltar
-                  </button>
-                )}
+              <div className="server-modal-actions">
+                <button type="button" className="btn-secondary" onClick={onClose}>
+                  Cancelar
+                </button>
                 <button type="submit" disabled={submitting || !code.trim()}>
                   {submitting ? "Entrando..." : "Entrar"}
                 </button>
               </div>
             </form>
-          </>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

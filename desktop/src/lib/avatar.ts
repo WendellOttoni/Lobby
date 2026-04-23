@@ -1,12 +1,25 @@
-const AVATAR_COLORS = [
-  "#5865f2", "#3ba55d", "#faa61a", "#ed4245",
-  "#00b0f4", "#a660e8", "#f47b67", "#43b581",
+const AVATAR_GRADIENTS: [string, string][] = [
+  ["#5865f2", "#7c6ef5"],
+  ["#3ba55d", "#4fc47a"],
+  ["#faa61a", "#fbbe52"],
+  ["#ed4245", "#f16568"],
+  ["#00b0f4", "#39c6ff"],
+  ["#a660e8", "#c184f0"],
+  ["#f47b67", "#f89e8e"],
+  ["#06b6d4", "#22d3ee"],
+  ["#ec4899", "#f472b6"],
+  ["#8b5cf6", "#a78bfa"],
 ];
 
-export function avatarBg(id: string): string {
+function hashId(id: string): number {
   let hash = 0;
   for (const c of id) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  return hash;
+}
+
+export function avatarBg(id: string): string {
+  const [a, b] = AVATAR_GRADIENTS[hashId(id) % AVATAR_GRADIENTS.length];
+  return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 }
 
 export function avatarInitials(name: string): string {

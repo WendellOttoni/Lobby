@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useAuth } from "../contexts/AuthContext";
+import { useVoice } from "../contexts/VoiceContext";
 import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
@@ -9,6 +10,7 @@ import { SettingsModal } from "../components/SettingsModal";
 
 export function ServersLayout() {
   const { token, user, logout } = useAuth();
+  const { isReconnecting, activeRoomName } = useVoice();
   const navigate = useNavigate();
   const { serverId } = useParams<{ serverId: string }>();
   const [servers, setServers] = useState<Server[]>([]);
@@ -36,6 +38,22 @@ export function ServersLayout() {
       }
     });
   }, [token]);
+
+  // Poll for unread counts every 20s
+  useEffect(() => {
+    if (!token) return;
+    const id = setInterval(loadServers, 20_000);
+    return () => clearInterval(id);
+  }, [token]);
+
+  // Mark active server as read
+  useEffect(() => {
+    if (!token || !serverId) return;
+    api.markServerRead(token, serverId).catch(() => {});
+    setServers((prev) =>
+      prev.map((s) => (s.id === serverId ? { ...s, unreadCount: 0 } : s))
+    );
+  }, [token, serverId]);
 
   // Handle deep links: lobby://join/INVITE_CODE
   useEffect(() => {
@@ -69,6 +87,12 @@ export function ServersLayout() {
 
   return (
     <div className="app-layout">
+      {isReconnecting && activeRoomName && (
+        <div className="reconnect-banner">
+          <span className="reconnect-dot" />
+          Conexão de voz caiu — reconectando em <b>{activeRoomName}</b>...
+        </div>
+      )}
       <ServerSidebar
         servers={servers}
         onAdd={() => { setModalInitialCode(undefined); setShowModal(true); }}
