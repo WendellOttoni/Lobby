@@ -39,7 +39,7 @@
   "plugins": {
     "deep-link": {
       "mobile": [],
-      "desktop": [{ "scheme": "lobby" }]
+      "desktop": [{ "schemes": ["lobby"] }]
     },
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFBRUUyN0Y2NUVENjI5OUUKUldTZUtkWmU5aWZ1R3ByeFUxcDhDSVNXZDZKaWpwVmY1d1RMbFJNS1Y1SGgrYUNGQ212V3gzQ3oK",
