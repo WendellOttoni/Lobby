@@ -109,7 +109,14 @@ export function ServerPage() {
                 className="btn-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
               >
-                Copiar
+                Copiar código
+              </button>
+              <button
+                onClick={() => navigator.clipboard.writeText(`lobby://join/${inviteCode}`)}
+                className="btn-secondary"
+                style={{ padding: "4px 10px", fontSize: "12px" }}
+              >
+                Copiar link
               </button>
               {server?.ownerId === user?.id && (
                 <button

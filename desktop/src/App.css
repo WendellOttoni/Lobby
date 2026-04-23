@@ -1791,3 +1791,42 @@ a:hover {
   font-size: 12px;
   padding: 5px 12px;
 }
+
+/* PTT settings */
+.settings-ptt { display: flex; flex-direction: column; gap: 8px; }
+.settings-ptt-desc { font-size: 13px; color: var(--text-dim); margin: 0; }
+.settings-ptt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-ptt-key {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  color: var(--accent);
+  min-width: 80px;
+  text-align: center;
+}
+
+/* VoiceBar PTT */
+.voice-bar-ptt-active {
+  font-size: 12px;
+  font-weight: 600;
+  color: #3ba55d;
+  padding: 2px 0;
+  text-align: center;
+}
+.voice-bar-ptt-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 0;
+  text-align: center;
+}
+.voice-bar-ptt-hint kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}

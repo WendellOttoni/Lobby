@@ -7,6 +7,9 @@ export function VoiceBar() {
     activeRoomName,
     connectionState,
     isMuted,
+    isPTTActive,
+    isReconnecting,
+    pttKey,
     localMicTrack,
     participants,
     volume,
@@ -29,11 +32,17 @@ export function VoiceBar() {
   return (
     <div className="voice-bar">
       <div className="voice-bar-header">
-        <span className={`voice-bar-dot ${isConnected ? "green" : isConnecting ? "yellow" : "red"}`} />
+        <span className={`voice-bar-dot ${isConnected ? "green" : isConnecting || isReconnecting ? "yellow" : "red"}`} />
         <div className="voice-bar-info">
           <span className="voice-bar-room">{activeRoomName}</span>
           <span className="voice-bar-sub">
-            {isConnected ? `${participants.length} na sala` : isConnecting ? "conectando..." : "desconectado"}
+            {isReconnecting
+              ? "reconectando..."
+              : isConnected
+              ? `${participants.length} na sala`
+              : isConnecting
+              ? "conectando..."
+              : "desconectado"}
           </span>
         </div>
         <button
@@ -49,6 +58,12 @@ export function VoiceBar() {
         <MicMeter track={localMicTrack} muted={isMuted} />
       </div>
 
+      {isPTTActive && (
+        <div className="voice-bar-ptt-active">
+          🟢 PTT ativo
+        </div>
+      )}
+
       <div className="voice-bar-controls">
         <button
           className={`voice-bar-mute ${isMuted ? "muted" : ""}`}
@@ -59,6 +74,12 @@ export function VoiceBar() {
           {isMuted ? "🎙️ Ativado" : "🔇 Silenciar"}
         </button>
       </div>
+
+      {pttKey && (
+        <p className="voice-bar-ptt-hint">
+          PTT: <kbd>{pttKey}</kbd>
+        </p>
+      )}
 
       {audioDevices.length > 0 && (
         <select

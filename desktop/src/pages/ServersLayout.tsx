@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Outlet, useNavigate, useParams } from "react-router-dom";
+import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useAuth } from "../contexts/AuthContext";
 import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
@@ -12,6 +13,7 @@ export function ServersLayout() {
   const { serverId } = useParams<{ serverId: string }>();
   const [servers, setServers] = useState<Server[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [modalInitialCode, setModalInitialCode] = useState<string | undefined>();
   const [showSettings, setShowSettings] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -35,8 +37,24 @@ export function ServersLayout() {
     });
   }, [token]);
 
+  // Handle deep links: lobby://join/INVITE_CODE
+  useEffect(() => {
+    const unlisten = onOpenUrl((urls) => {
+      for (const url of urls) {
+        const match = url.match(/^lobby:\/\/join\/([a-z0-9]+)/i);
+        if (match) {
+          setModalInitialCode(match[1]);
+          setShowModal(true);
+          break;
+        }
+      }
+    });
+    return () => { unlisten.then((fn) => fn()); };
+  }, []);
+
   async function handleModalDone() {
     setShowModal(false);
+    setModalInitialCode(undefined);
     const list = await loadServers();
     if (list && list.length > 0) {
       const newest = list[list.length - 1];
@@ -44,11 +62,16 @@ export function ServersLayout() {
     }
   }
 
+  function handleModalClose() {
+    setShowModal(false);
+    setModalInitialCode(undefined);
+  }
+
   return (
     <div className="app-layout">
       <ServerSidebar
         servers={servers}
-        onAdd={() => setShowModal(true)}
+        onAdd={() => { setModalInitialCode(undefined); setShowModal(true); }}
         user={user}
         onLogout={logout}
         onSettings={() => setShowSettings(true)}
@@ -68,7 +91,11 @@ export function ServersLayout() {
       </div>
 
       {showModal && (
-        <ServerModal onClose={() => setShowModal(false)} onDone={handleModalDone} />
+        <ServerModal
+          initialCode={modalInitialCode}
+          onClose={handleModalClose}
+          onDone={handleModalDone}
+        />
       )}
 
       {showSettings && (

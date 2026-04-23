@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import {
   ConnectionState,
   LocalAudioTrack,
@@ -9,6 +9,8 @@ import {
   RoomEvent,
   Track,
 } from "livekit-client";
+import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { api } from "../lib/api";
 
 export interface VoiceParticipant {
@@ -19,6 +21,13 @@ export interface VoiceParticipant {
   isMuted: boolean;
 }
 
+interface ConnectParams {
+  authToken: string;
+  serverId: string;
+  roomId: string;
+  roomName: string;
+}
+
 interface VoiceContextValue {
   activeServerId: string | null;
   activeRoomId: string | null;
@@ -26,6 +35,8 @@ interface VoiceContextValue {
   connectionState: ConnectionState;
   participants: VoiceParticipant[];
   isMuted: boolean;
+  isPTTActive: boolean;
+  isReconnecting: boolean;
   volume: number;
   audioDevices: MediaDeviceInfo[];
   selectedDevice: string;
@@ -33,6 +44,7 @@ interface VoiceContextValue {
   error: string | null;
   nicknames: Record<string, string>;
   userVolumes: Record<string, number>;
+  pttKey: string | null;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
@@ -40,6 +52,7 @@ interface VoiceContextValue {
   setVolumeAll: (v: number) => void;
   setNickname: (identity: string, name: string) => void;
   setUserVolume: (identity: string, v: number) => void;
+  setPttKey: (key: string | null) => void;
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -47,6 +60,9 @@ const VoiceContext = createContext<VoiceContextValue | null>(null);
 const VOLUME_KEY = "lobby_volume";
 const NICKNAMES_KEY = "lobby_nicknames";
 const USER_VOLUMES_KEY = "lobby_user_volumes";
+const PTT_KEY_STORAGE = "lobby_ptt_key";
+
+const RECONNECT_DELAYS = [2000, 5000, 10000, 20000, 30000];
 
 function loadInitialVolume(): number {
   const v = parseFloat(localStorage.getItem(VOLUME_KEY) ?? "");
@@ -62,9 +78,30 @@ function loadJSON<T>(key: string, fallback: T): T {
   }
 }
 
+async function notifyParticipantJoined(name: string) {
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const perm = await requestPermission();
+      granted = perm === "granted";
+    }
+    if (granted) {
+      sendNotification({ title: "Lobby", body: `${name} entrou na sala` });
+    }
+  } catch {
+    // notificações não críticas — falha silenciosa
+  }
+}
+
 export function VoiceProvider({ children }: { children: ReactNode }) {
   const roomRef = useRef<Room | null>(null);
   const volumeRef = useRef(loadInitialVolume());
+  const userWantsMutedRef = useRef(false);
+  const pttActiveRef = useRef(false);
+  const shouldReconnectRef = useRef(false);
+  const reconnectParamsRef = useRef<ConnectParams | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
@@ -72,11 +109,16 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [isPTTActive, setIsPTTActive] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
   const [volume, setVolumeState] = useState<number>(loadInitialVolume);
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDevice, setSelectedDevice] = useState("");
   const [localMicTrack, setLocalMicTrack] = useState<MediaStreamTrack | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pttKey, setPttKeyState] = useState<string | null>(() =>
+    localStorage.getItem(PTT_KEY_STORAGE)
+  );
 
   const [nicknames, setNicknamesState] = useState<Record<string, string>>(() =>
     loadJSON<Record<string, string>>(NICKNAMES_KEY, {})
@@ -85,6 +127,38 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     loadJSON<Record<string, number>>(USER_VOLUMES_KEY, {})
   );
   const userVolumesRef = useRef(userVolumes);
+
+  // Register/unregister PTT global shortcut whenever pttKey changes
+  useEffect(() => {
+    if (!pttKey) return;
+
+    let active = true;
+
+    register(pttKey, (event) => {
+      if (!active) return;
+      const room = roomRef.current;
+      if (!room) return;
+
+      if (event.state === "Pressed" && !pttActiveRef.current) {
+        pttActiveRef.current = true;
+        setIsPTTActive(true);
+        if (userWantsMutedRef.current) {
+          room.localParticipant.setMicrophoneEnabled(true).then(() => setIsMuted(false));
+        }
+      } else if (event.state === "Released" && pttActiveRef.current) {
+        pttActiveRef.current = false;
+        setIsPTTActive(false);
+        if (userWantsMutedRef.current) {
+          room.localParticipant.setMicrophoneEnabled(false).then(() => setIsMuted(true));
+        }
+      }
+    }).catch((e) => console.warn("[ptt] register failed:", e));
+
+    return () => {
+      active = false;
+      unregister(pttKey).catch(() => {});
+    };
+  }, [pttKey]);
 
   function applyVolumeTo(p: RemoteParticipant) {
     const mult = userVolumesRef.current[p.identity] ?? 1;
@@ -121,17 +195,30 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setActiveRoomId(null);
     setActiveRoomName(null);
     setIsMuted(false);
+    setIsPTTActive(false);
+    setIsReconnecting(false);
     setAudioDevices([]);
     setSelectedDevice("");
+    userWantsMutedRef.current = false;
+    pttActiveRef.current = false;
   }
 
   async function connect(authToken: string, serverId: string, roomId: string, roomName: string) {
     setError(null);
 
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
     if (roomRef.current) {
       roomRef.current.disconnect();
       roomRef.current = null;
     }
+
+    shouldReconnectRef.current = true;
+    reconnectParamsRef.current = { authToken, serverId, roomId, roomName };
+    reconnectAttemptsRef.current = 0;
 
     const room = new Room({ dynacast: true });
     roomRef.current = room;
@@ -140,12 +227,14 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setActiveRoomId(roomId);
     setActiveRoomName(roomName);
     setIsMuted(false);
+    userWantsMutedRef.current = false;
     setConnectionState(ConnectionState.Connecting);
 
     room
       .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => {
         applyVolumeTo(p);
         snapshotRoom(room);
+        notifyParticipantJoined(p.name ?? p.identity);
       })
       .on(RoomEvent.ParticipantDisconnected, () => snapshotRoom(room))
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
@@ -180,8 +269,30 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       })
       .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
         setConnectionState(state);
-        if (state === ConnectionState.Connected) snapshotRoom(room);
-        if (state === ConnectionState.Disconnected && roomRef.current === room) resetState();
+
+        if (state === ConnectionState.Connected) {
+          reconnectAttemptsRef.current = 0;
+          setIsReconnecting(false);
+          snapshotRoom(room);
+        }
+
+        if (state === ConnectionState.Disconnected && roomRef.current === room) {
+          const params = reconnectParamsRef.current;
+          const attempt = reconnectAttemptsRef.current;
+
+          if (shouldReconnectRef.current && params && attempt < RECONNECT_DELAYS.length) {
+            const delay = RECONNECT_DELAYS[attempt];
+            reconnectAttemptsRef.current = attempt + 1;
+            setIsReconnecting(true);
+            reconnectTimerRef.current = setTimeout(() => {
+              if (shouldReconnectRef.current && reconnectParamsRef.current) {
+                connect(params.authToken, params.serverId, params.roomId, params.roomName);
+              }
+            }, delay);
+          } else {
+            resetState();
+          }
+        }
       });
 
     try {
@@ -211,10 +322,18 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       setError(err instanceof Error ? err.message : "Erro ao conectar na sala");
       resetState();
       roomRef.current = null;
+      shouldReconnectRef.current = false;
+      reconnectParamsRef.current = null;
     }
   }
 
   function disconnect() {
+    shouldReconnectRef.current = false;
+    reconnectParamsRef.current = null;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (roomRef.current) {
       roomRef.current.disconnect();
       roomRef.current = null;
@@ -227,6 +346,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (!room) return;
     const nextEnabled = isMuted;
     await room.localParticipant.setMicrophoneEnabled(nextEnabled);
+    userWantsMutedRef.current = !nextEnabled;
     setIsMuted(!nextEnabled);
   }
 
@@ -272,14 +392,20 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (p) p.setVolume(volumeRef.current * clamped);
   }
 
+  function setPttKey(key: string | null) {
+    if (key) localStorage.setItem(PTT_KEY_STORAGE, key);
+    else localStorage.removeItem(PTT_KEY_STORAGE);
+    setPttKeyState(key);
+  }
+
   return (
     <VoiceContext.Provider value={{
       activeServerId, activeRoomId, activeRoomName,
-      connectionState, participants, isMuted, volume,
-      audioDevices, selectedDevice, localMicTrack, error,
-      nicknames, userVolumes,
+      connectionState, participants, isMuted, isPTTActive, isReconnecting,
+      volume, audioDevices, selectedDevice, localMicTrack, error,
+      nicknames, userVolumes, pttKey,
       connect, disconnect, toggleMute, changeDevice, setVolumeAll,
-      setNickname, setUserVolume,
+      setNickname, setUserVolume, setPttKey,
     }}>
       {children}
     </VoiceContext.Provider>

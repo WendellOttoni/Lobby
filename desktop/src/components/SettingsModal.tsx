@@ -1,8 +1,9 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { useAuth } from "../contexts/AuthContext";
+import { useVoice } from "../contexts/VoiceContext";
 import { api, User } from "../lib/api";
 
 interface Props {
@@ -13,8 +14,24 @@ type UpdateStatus = "idle" | "checking" | "latest" | "downloading" | "error";
 
 const UPDATER_KEYWORDS = ["network", "connect", "dns", "timeout", "resolve", "offline"];
 
+// Browser key names that work as Tauri global shortcut names
+const ALLOWED_PTT_KEYS: Record<string, string> = {
+  CapsLock: "CapsLock",
+  ScrollLock: "ScrollLock",
+  Pause: "Pause",
+  F1: "F1", F2: "F2", F3: "F3", F4: "F4",
+  F5: "F5", F6: "F6", F7: "F7", F8: "F8",
+  F9: "F9", F10: "F10", F11: "F11", F12: "F12",
+  Insert: "Insert",
+  Home: "Home",
+  End: "End",
+  PageUp: "PageUp",
+  PageDown: "PageDown",
+};
+
 export function SettingsModal({ onClose }: Props) {
   const { user, token, setUser } = useAuth();
+  const voice = useVoice();
 
   const [username, setUsername] = useState(user?.username ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -25,6 +42,8 @@ export function SettingsModal({ onClose }: Props) {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>("idle");
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
+
+  const [recordingPTT, setRecordingPTT] = useState(false);
 
   async function loadVersion() {
     if (version) return;
@@ -76,6 +95,16 @@ export function SettingsModal({ onClose }: Props) {
       console.error("[updater] check failed:", msg);
       setUpdateError(msg);
       setUpdateStatus("error");
+    }
+  }
+
+  function handlePTTKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+    if (!recordingPTT) return;
+    e.preventDefault();
+    const tauriKey = ALLOWED_PTT_KEYS[e.key];
+    if (tauriKey) {
+      voice.setPttKey(tauriKey);
+      setRecordingPTT(false);
     }
   }
 
@@ -141,6 +170,42 @@ export function SettingsModal({ onClose }: Props) {
                 {saving ? "Salvando..." : "Salvar alterações"}
               </button>
             </form>
+          </section>
+
+          <section className="settings-section">
+            <h3>Push-to-talk</h3>
+            <div className="settings-ptt">
+              <p className="settings-ptt-desc">
+                Segure a tecla configurada para falar enquanto estiver mutado.
+              </p>
+              <div className="settings-ptt-row">
+                <span className="settings-ptt-key">
+                  {voice.pttKey ?? "Não configurado"}
+                </span>
+                <button
+                  className={recordingPTT ? "btn-danger-outline" : "btn-secondary"}
+                  onKeyDown={handlePTTKeyDown}
+                  onClick={() => setRecordingPTT((r) => !r)}
+                  style={{ fontSize: 13, padding: "6px 12px" }}
+                >
+                  {recordingPTT ? "Aguardando tecla..." : "Alterar"}
+                </button>
+                {voice.pttKey && !recordingPTT && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() => voice.setPttKey(null)}
+                    style={{ fontSize: 13, padding: "6px 12px" }}
+                  >
+                    Limpar
+                  </button>
+                )}
+              </div>
+              {recordingPTT && (
+                <p style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
+                  Teclas suportadas: F1–F12, CapsLock, ScrollLock, Pause, Insert, Home, End, PageUp, PageDown
+                </p>
+              )}
+            </div>
           </section>
 
           <section className="settings-section">

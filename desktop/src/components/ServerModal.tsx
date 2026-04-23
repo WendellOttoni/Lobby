@@ -7,13 +7,14 @@ type Mode = "choose" | "create" | "join";
 interface Props {
   onClose: () => void;
   onDone: () => void;
+  initialCode?: string;
 }
 
-export function ServerModal({ onClose, onDone }: Props) {
+export function ServerModal({ onClose, onDone, initialCode }: Props) {
   const { token } = useAuth();
-  const [mode, setMode] = useState<Mode>("choose");
+  const [mode, setMode] = useState<Mode>(initialCode ? "join" : "choose");
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -104,9 +105,11 @@ export function ServerModal({ onClose, onDone }: Props) {
               />
               {error && <p className="error">{error}</p>}
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setMode("choose")}>
-                  Voltar
-                </button>
+                {!initialCode && (
+                  <button type="button" className="btn-secondary" onClick={() => setMode("choose")}>
+                    Voltar
+                  </button>
+                )}
                 <button type="submit" disabled={submitting || !code.trim()}>
                   {submitting ? "Entrando..." : "Entrar"}
                 </button>
