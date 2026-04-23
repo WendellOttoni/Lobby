@@ -121,6 +121,35 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.send({ server, role: member.role });
   });
 
+  // Delete server (owner only)
+  fastify.delete("/:serverId", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode deletar o servidor" });
+
+    await prisma.server.delete({ where: { id: serverId } });
+    return reply.status(204).send();
+  });
+
+  // Leave server (non-owners only)
+  fastify.post("/:serverId/leave", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId === sub) return reply.status(400).send({ error: "O dono não pode sair do servidor — delete-o ou transfira a propriedade" });
+
+    await prisma.serverMember.delete({
+      where: { userId_serverId: { userId: sub, serverId } },
+    });
+
+    return reply.status(204).send();
+  });
+
   // Regenerate invite code (owner only)
   fastify.post("/:serverId/invite/reset", async (request, reply) => {
     const { sub } = request.user as { sub: string };
@@ -193,6 +222,22 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
       return reply.status(201).send({ room });
     },
+  });
+
+  // Delete room (owner only)
+  fastify.delete("/:serverId/rooms/:roomId", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, roomId } = request.params as { serverId: string; roomId: string };
+
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode deletar salas" });
+
+    const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
+    if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
+
+    await prisma.room.delete({ where: { id: roomId } });
+    return reply.status(204).send();
   });
 
   // Get LiveKit token for room

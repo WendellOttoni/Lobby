@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
 import { api, Room, Server } from "../lib/api";
@@ -9,6 +9,7 @@ import { VoiceBar } from "../components/VoiceBar";
 
 export function ServerPage() {
   const { serverId } = useParams<{ serverId: string }>();
+  const navigate = useNavigate();
   const { user, token } = useAuth();
   const voice = useVoice();
 
@@ -19,7 +20,10 @@ export function ServerPage() {
   const [error, setError] = useState<string | null>(null);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const isOwner = server?.ownerId === user?.id;
 
   async function loadRooms() {
     if (!token || !serverId) return;
@@ -55,6 +59,12 @@ export function ServerPage() {
     };
   }, [token, serverId]);
 
+  function copy(text: string, label: string) {
+    navigator.clipboard.writeText(text);
+    setCopiedMsg(label);
+    setTimeout(() => setCopiedMsg(null), 2000);
+  }
+
   async function onCreateRoom(e: FormEvent) {
     e.preventDefault();
     if (!token || !serverId || !newRoomName.trim()) return;
@@ -67,6 +77,18 @@ export function ServerPage() {
     }
   }
 
+  async function handleDeleteRoom(room: Room) {
+    if (!token || !serverId) return;
+    if (!window.confirm(`Deletar a sala "${room.name}"? Isso é permanente.`)) return;
+    if (voice.activeRoomId === room.id) voice.disconnect();
+    try {
+      await api.deleteRoom(token, serverId, room.id);
+      loadRooms();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao deletar sala");
+    }
+  }
+
   async function handleResetInvite() {
     if (!token || !serverId) return;
     try {
@@ -74,6 +96,32 @@ export function ServerPage() {
       setInviteCode(newCode);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao resetar convite");
+    }
+  }
+
+  async function handleLeaveServer() {
+    if (!token || !serverId) return;
+    if (!window.confirm(`Sair do servidor "${server?.name}"?`)) return;
+    try {
+      voice.disconnect();
+      await api.leaveServer(token, serverId);
+      navigate("/servers", { replace: true });
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao sair do servidor");
+    }
+  }
+
+  async function handleDeleteServer() {
+    if (!token || !serverId) return;
+    if (!window.confirm(`Deletar o servidor "${server?.name}" permanentemente? Isso remove todas as salas e mensagens.`)) return;
+    try {
+      voice.disconnect();
+      await api.deleteServer(token, serverId);
+      navigate("/servers", { replace: true });
+      window.location.reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao deletar servidor");
     }
   }
 
@@ -105,20 +153,20 @@ export function ServerPage() {
               <span>Código:</span>
               <code>{inviteCode}</code>
               <button
-                onClick={() => navigator.clipboard.writeText(inviteCode)}
+                onClick={() => copy(inviteCode, "Código copiado!")}
                 className="btn-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
               >
                 Copiar código
               </button>
               <button
-                onClick={() => navigator.clipboard.writeText(`lobby://join/${inviteCode}`)}
+                onClick={() => copy(`lobby://join/${inviteCode}`, "Link copiado!")}
                 className="btn-secondary"
                 style={{ padding: "4px 10px", fontSize: "12px" }}
               >
                 Copiar link
               </button>
-              {server?.ownerId === user?.id && (
+              {isOwner && (
                 <button
                   onClick={handleResetInvite}
                   className="btn-danger-outline"
@@ -126,6 +174,11 @@ export function ServerPage() {
                 >
                   Resetar
                 </button>
+              )}
+              {copiedMsg && (
+                <span style={{ fontSize: "12px", color: "var(--accent)", fontWeight: 600 }}>
+                  {copiedMsg}
+                </span>
               )}
             </div>
           )}
@@ -163,21 +216,26 @@ export function ServerPage() {
                     <div className="voice-room-header">
                       <span className="voice-room-icon">🔊</span>
                       <span className="voice-room-name">{room.name}</span>
-                      {isActive ? (
-                        <button
-                          className="btn-danger-outline voice-room-action"
-                          onClick={voice.disconnect}
-                        >
-                          Sair
-                        </button>
-                      ) : (
-                        <button
-                          className="voice-room-action"
-                          onClick={() => handleEnterRoom(room)}
-                        >
-                          Entrar
-                        </button>
-                      )}
+                      <div className="voice-room-actions">
+                        {isActive ? (
+                          <button className="btn-danger-outline voice-room-action" onClick={voice.disconnect}>
+                            Sair
+                          </button>
+                        ) : (
+                          <button className="voice-room-action" onClick={() => handleEnterRoom(room)}>
+                            Entrar
+                          </button>
+                        )}
+                        {isOwner && (
+                          <button
+                            className="voice-room-delete"
+                            onClick={() => handleDeleteRoom(room)}
+                            title="Deletar sala"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     {isActive ? (
@@ -203,6 +261,19 @@ export function ServerPage() {
               })
             )}
           </ul>
+
+          {/* Gerenciar servidor */}
+          <div className="server-danger-zone">
+            {isOwner ? (
+              <button className="btn-danger-outline" style={{ fontSize: "12px" }} onClick={handleDeleteServer}>
+                Deletar servidor
+              </button>
+            ) : (
+              <button className="btn-danger-outline" style={{ fontSize: "12px" }} onClick={handleLeaveServer}>
+                Sair do servidor
+              </button>
+            )}
+          </div>
         </div>
 
         <VoiceBar />

@@ -1,7 +1,8 @@
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
+import { enable as autostartEnable, disable as autostartDisable, isEnabled as autostartIsEnabled } from "@tauri-apps/plugin-autostart";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
 import { api, User } from "../lib/api";
@@ -44,6 +45,25 @@ export function SettingsModal({ onClose }: Props) {
   const [version, setVersion] = useState<string | null>(null);
 
   const [recordingPTT, setRecordingPTT] = useState(false);
+  const [autostart, setAutostart] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    autostartIsEnabled().then(setAutostart).catch(() => setAutostart(false));
+  }, []);
+
+  async function toggleAutostart() {
+    try {
+      if (autostart) {
+        await autostartDisable();
+        setAutostart(false);
+      } else {
+        await autostartEnable();
+        setAutostart(true);
+      }
+    } catch (e) {
+      console.error("[autostart]", e);
+    }
+  }
 
   async function loadVersion() {
     if (version) return;
@@ -170,6 +190,22 @@ export function SettingsModal({ onClose }: Props) {
                 {saving ? "Salvando..." : "Salvar alterações"}
               </button>
             </form>
+          </section>
+
+          <section className="settings-section">
+            <h3>Sistema</h3>
+            <div className="settings-system">
+              <label className="settings-toggle-row">
+                <span>Iniciar com o Windows</span>
+                <button
+                  className={`settings-toggle ${autostart ? "on" : "off"}`}
+                  onClick={toggleAutostart}
+                  disabled={autostart === null}
+                >
+                  {autostart ? "Ativado" : "Desativado"}
+                </button>
+              </label>
+            </div>
           </section>
 
           <section className="settings-section">

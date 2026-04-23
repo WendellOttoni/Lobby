@@ -140,6 +140,15 @@ export const api = {
       token,
       body: JSON.stringify(data),
     }),
+
+  deleteServer: (token: string, serverId: string) =>
+    request<void>(`/servers/${serverId}`, { method: "DELETE", token }),
+
+  leaveServer: (token: string, serverId: string) =>
+    request<void>(`/servers/${serverId}/leave`, { method: "POST", token }),
+
+  deleteRoom: (token: string, serverId: string, roomId: string) =>
+    request<void>(`/servers/${serverId}/rooms/${roomId}`, { method: "DELETE", token }),
 };
 
 export { ApiError };

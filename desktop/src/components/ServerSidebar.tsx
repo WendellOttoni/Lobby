@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useVoice } from "../contexts/VoiceContext";
 import { Server } from "../lib/api";
 
 interface Props {
@@ -12,6 +14,15 @@ interface Props {
 export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Props) {
   const navigate = useNavigate();
   const { serverId } = useParams<{ serverId: string }>();
+  const { activeServerId } = useVoice();
+  const [copied, setCopied] = useState<string | null>(null);
+
+  function copyInvite(server: Server, e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(`lobby://join/${server.inviteCode}`);
+    setCopied(server.id);
+    setTimeout(() => setCopied(null), 1500);
+  }
 
   const initials = user?.username
     ? user.username.slice(0, 2).toUpperCase()
@@ -21,14 +32,23 @@ export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Pr
     <nav className="server-sidebar">
       <div className="sidebar-icons">
         {servers.map((s) => (
-          <button
-            key={s.id}
-            className={`server-icon ${s.id === serverId ? "active" : ""}`}
-            onClick={() => navigate(`/servers/${s.id}`)}
-            title={s.name}
-          >
-            {s.name.slice(0, 2).toUpperCase()}
-          </button>
+          <div key={s.id} className="server-icon-wrap">
+            <button
+              className={`server-icon ${s.id === serverId ? "active" : ""}`}
+              onClick={() => navigate(`/servers/${s.id}`)}
+              title={s.name}
+            >
+              {s.name.slice(0, 2).toUpperCase()}
+              {activeServerId === s.id && <span className="server-icon-voice-dot" />}
+            </button>
+            <button
+              className="server-icon-copy"
+              onClick={(e) => copyInvite(s, e)}
+              title="Copiar link de convite"
+            >
+              {copied === s.id ? "✓" : "⎘"}
+            </button>
+          </div>
         ))}
 
         <div className="sidebar-divider" />
