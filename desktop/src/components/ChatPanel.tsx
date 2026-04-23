@@ -66,17 +66,20 @@ export function ChatPanel({ serverId, token, currentUserId }: Props) {
       const url = `${wsUrl()}/servers/${serverId}/ws?token=${token}`;
       const ws = new WebSocket(url);
       wsRef.current = ws;
+      let openedAt = 0;
 
       ws.onopen = () => {
-        retryDelay = 1000;
+        openedAt = Date.now();
         setConnected(true);
       };
 
       ws.onclose = () => {
         setConnected(false);
         if (cancelled) return;
+        // só reseta o delay se ficou conectado por pelo menos 5s
+        if (openedAt && Date.now() - openedAt > 5000) retryDelay = 2000;
         retryTimer = setTimeout(open, retryDelay);
-        retryDelay = Math.min(retryDelay * 2, 15000);
+        retryDelay = Math.min(retryDelay * 2, 30000);
       };
 
       ws.onmessage = (event) => {

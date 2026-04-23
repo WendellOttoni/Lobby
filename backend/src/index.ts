@@ -21,6 +21,7 @@ const fastify = Fastify({
 const extraOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()) ?? [];
 
 fastify.register(cors, {
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
   origin: (origin, cb) => {
     if (
       !origin ||
