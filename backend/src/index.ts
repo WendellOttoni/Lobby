@@ -1,6 +1,7 @@
 import "dotenv/config";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
 import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
@@ -41,6 +42,7 @@ fastify.register(cors, {
 });
 
 fastify.register(websocket);
+fastify.register(rateLimit, { global: false });
 fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });
 fastify.register(serversRoutes, { prefix: "/servers" });

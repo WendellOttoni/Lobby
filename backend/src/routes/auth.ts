@@ -6,7 +6,10 @@ import { updatePresence } from "../services/presence.js";
 const SALT_ROUNDS = 12;
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
+  const authLimit = { rateLimit: { max: 8, timeWindow: "1 minute" } };
+
   fastify.post("/register", {
+    config: authLimit,
     schema: {
       body: {
         type: "object",
@@ -49,6 +52,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   fastify.post("/login", {
+    config: authLimit,
     schema: {
       body: {
         type: "object",

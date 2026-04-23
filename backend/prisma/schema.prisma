@@ -33,11 +33,12 @@ model Server {
 }
 
 model ServerMember {
-  id       String   @id @default(cuid())
-  userId   String
-  serverId String
-  role     String   @default("member")
-  joinedAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  serverId   String
+  role       String   @default("member")
+  joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)

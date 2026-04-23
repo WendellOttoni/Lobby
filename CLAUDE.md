@@ -33,11 +33,19 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 - Tray icon com menu "Abrir" e "Sair"
 - Auto-updater: verifica ao iniciar + botão manual em Settings
 - Settings modal: editar conta + verificar atualizações
-- CI publica nova release a cada push no `main` (tag `v0.0.N`)
+- CI publica nova release a cada push no `main` (tag `v0.1.N`)
+
+**Extras pós-MVP**
+- Push-to-talk com hotkey global configurável (Settings > Push-to-talk)
+- Detecção de jogo ativo via `tasklist` (Windows)
+- Notificações nativas quando alguém entra em sala
+- Lista de membros online/offline por servidor com jogo atual
+- Autostart com Windows (toggle em Settings)
+- Deep links `lobby://join/CODE` (single-instance)
 
 ## O que NÃO entra (fora de escopo atual)
 
-Vídeo, compartilhamento de tela, push-to-talk global hotkey, overlay, permissões avançadas,
+Vídeo, compartilhamento de tela, overlay, permissões avançadas,
 moderação, banimento, bots, notificações push, upload de arquivos.
 
 ## Stack
@@ -53,9 +61,6 @@ moderação, banimento, bots, notificações push, upload de arquivos.
 | Servidor de mídia | LiveKit (binário local em dev, self-hosted em prod) |
 | Deploy backend | Railway |
 | CI/CD | GitHub Actions — build + release automática |
-
-> Redis listado no plano original mas não está em uso — presença é gerenciada pelo LiveKit.
-> Remover `REDIS_URL` do `.env.example` se ainda estiver lá.
 
 ## Estrutura de pastas
 
@@ -136,12 +141,11 @@ lobby/
 - Imports absolutos no backend (`src/` como base)
 - Componentes React em PascalCase, hooks em camelCase com prefixo `use`
 - Rotas Fastify organizadas por domínio em `src/routes/`
-- Versão do app é sempre sobrescrita pelo CI para `0.0.${run_number}` — não alterar manualmente
+- Versão do app é sempre sobrescrita pelo CI para `0.1.${run_number}` — não alterar manualmente
 
-## Próximas possibilidades (Sprint 6+)
+## Próximas possibilidades
 
-- Push-to-talk global (hotkey de sistema via Tauri)
-- Auto-start com o Windows
 - Permissões por sala (owner pode moderar)
-- Notificações de desktop quando alguém entra em sala
 - Overlay flutuante sobre outros apps
+- Upload de avatar real (hoje é gerado por cor)
+- Mover presença pra Redis se for escalar pra múltiplas instâncias do backend

@@ -36,7 +36,38 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       orderBy: { joinedAt: "asc" },
     });
 
-    return reply.send({ servers: memberships.map((m) => ({ ...m.server, role: m.role })) });
+    const unreadCounts = await Promise.all(
+      memberships.map((m) =>
+        prisma.message.count({
+          where: {
+            serverId: m.serverId,
+            createdAt: { gt: m.lastReadAt },
+            authorId: { not: sub },
+          },
+        })
+      )
+    );
+
+    return reply.send({
+      servers: memberships.map((m, i) => ({
+        ...m.server,
+        role: m.role,
+        unreadCount: unreadCounts[i],
+      })),
+    });
+  });
+
+  // Mark server as read
+  fastify.post("/:serverId/read", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    await prisma.serverMember.update({
+      where: { userId_serverId: { userId: sub, serverId } },
+      data: { lastReadAt: new Date() },
+    });
+
+    return reply.status(204).send();
   });
 
   // Create server
