@@ -4,6 +4,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
 import { api, Room, Server } from "../lib/api";
 import { ChatPanel } from "../components/ChatPanel";
+import { MemberList } from "../components/MemberList";
 import { ParticipantCard } from "../components/ParticipantCard";
 import { VoiceBar } from "../components/VoiceBar";
 
@@ -279,13 +280,18 @@ export function ServerPage() {
         <VoiceBar />
       </div>
 
-      {/* Coluna direita — chat */}
+      {/* Coluna central — chat */}
       {token && user && serverId && (
         <ChatPanel
           serverId={serverId}
           token={token}
           currentUserId={user.id}
         />
+      )}
+
+      {/* Coluna direita — membros */}
+      {token && serverId && (
+        <MemberList serverId={serverId} token={token} />
       )}
     </div>
   );

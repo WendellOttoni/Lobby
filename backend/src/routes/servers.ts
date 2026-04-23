@@ -2,6 +2,7 @@ import { FastifyPluginAsync } from "fastify";
 import { AccessToken } from "livekit-server-sdk";
 import prisma from "../db/client.js";
 import { getRoomService } from "../services/livekit.js";
+import { isOnline, getPresence } from "../services/presence.js";
 
 function generateCode(len = 8) {
   const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -238,6 +239,37 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
     await prisma.room.delete({ where: { id: roomId } });
     return reply.status(204).send();
+  });
+
+  // List server members with online status
+  fastify.get("/:serverId/members", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    const members = await prisma.serverMember.findMany({
+      where: { serverId },
+      include: { user: { select: { id: true, username: true } } },
+      orderBy: { joinedAt: "asc" },
+    });
+
+    return reply.send({
+      members: members.map((m) => {
+        const online = isOnline(m.userId);
+        const presence = getPresence(m.userId);
+        return {
+          id: m.user.id,
+          username: m.user.username,
+          role: m.role,
+          online,
+          game: presence?.game ?? null,
+        };
+      }),
+    });
   });
 
   // Get LiveKit token for room

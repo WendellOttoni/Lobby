@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcrypt";
 import prisma from "../db/client.js";
+import { updatePresence } from "../services/presence.js";
 
 const SALT_ROUNDS = 12;
 
@@ -100,6 +101,17 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
 
       return reply.send({ user });
+    }
+  );
+
+  fastify.post(
+    "/heartbeat",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const { sub, username } = request.user as { sub: string; username: string };
+      const { game } = (request.body ?? {}) as { game?: string | null };
+      updatePresence(sub, username, game ?? null);
+      return reply.status(204).send();
     }
   );
 

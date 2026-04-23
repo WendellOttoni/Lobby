@@ -1,8 +1,65 @@
+use std::collections::HashMap;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager,
 };
+
+#[tauri::command]
+fn detect_game() -> Option<String> {
+    let known: HashMap<&str, &str> = [
+        ("cs2.exe", "Counter-Strike 2"),
+        ("csgo.exe", "CS:GO"),
+        ("valorant.exe", "VALORANT"),
+        ("RainbowSix.exe", "Rainbow Six Siege"),
+        ("FortniteClient-Win64-Shipping.exe", "Fortnite"),
+        ("VALORANT-Win64-Shipping.exe", "VALORANT"),
+        ("LeagueOfLegends.exe", "League of Legends"),
+        ("Dota2.exe", "Dota 2"),
+        ("overwatch.exe", "Overwatch 2"),
+        ("destiny2.exe", "Destiny 2"),
+        ("EscapeFromTarkov.exe", "Escape from Tarkov"),
+        ("RustClient.exe", "Rust"),
+        ("GTA5.exe", "GTA V"),
+        ("Minecraft.Windows.exe", "Minecraft"),
+        ("javaw.exe", "Minecraft"),
+        ("eldenring.exe", "Elden Ring"),
+        ("DARK SOULS III.exe", "Dark Souls III"),
+        ("sekiro.exe", "Sekiro"),
+        ("HorizonZeroDawn.exe", "Horizon Zero Dawn"),
+        ("Cyberpunk2077.exe", "Cyberpunk 2077"),
+        ("witcher3.exe", "The Witcher 3"),
+        ("RocketLeague.exe", "Rocket League"),
+        ("PUBG.exe", "PUBG"),
+        ("WorldOfWarcraft.exe", "World of Warcraft"),
+        ("ffxiv_dx11.exe", "Final Fantasy XIV"),
+        ("Hearthstone.exe", "Hearthstone"),
+        ("StarCraft II.exe", "StarCraft II"),
+        ("Warframe.x64.exe", "Warframe"),
+        ("PathOfExile.exe", "Path of Exile"),
+    ]
+    .into_iter()
+    .collect();
+
+    let output = std::process::Command::new("tasklist")
+        .args(["/FO", "CSV", "/NH"])
+        .output()
+        .ok()?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        // CSV format: "ImageName","PID","SessionName","Session#","MemUsage"
+        if let Some(name) = line.split(',').next() {
+            let exe = name.trim_matches('"');
+            for (proc, game) in &known {
+                if exe.eq_ignore_ascii_case(proc) {
+                    return Some(game.to_string());
+                }
+            }
+        }
+    }
+    None
+}
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -87,6 +144,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
+        .invoke_handler(tauri::generate_handler![detect_game])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

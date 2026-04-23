@@ -29,6 +29,14 @@ export interface Room {
   onlineCount: number;
 }
 
+export interface Member {
+  id: string;
+  username: string;
+  role: string;
+  online: boolean;
+  game: string | null;
+}
+
 export interface AuthResponse {
   token: string;
   user: User;
@@ -149,6 +157,16 @@ export const api = {
 
   deleteRoom: (token: string, serverId: string, roomId: string) =>
     request<void>(`/servers/${serverId}/rooms/${roomId}`, { method: "DELETE", token }),
+
+  heartbeat: (token: string, game: string | null) =>
+    request<void>("/auth/heartbeat", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ game }),
+    }),
+
+  listMembers: (token: string, serverId: string) =>
+    request<{ members: Member[] }>(`/servers/${serverId}/members`, { token }),
 };
 
 export { ApiError };
