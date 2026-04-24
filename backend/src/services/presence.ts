@@ -2,6 +2,7 @@ interface PresenceEntry {
   username: string;
   lastSeen: number;
   game: string | null;
+  statusText: string | null;
 }
 
 const store = new Map<string, PresenceEntry>();
@@ -18,8 +19,8 @@ const gcTimer = setInterval(() => {
 }, GC_INTERVAL_MS);
 gcTimer.unref?.();
 
-export function updatePresence(userId: string, username: string, game: string | null) {
-  store.set(userId, { username, lastSeen: Date.now(), game });
+export function updatePresence(userId: string, username: string, game: string | null, statusText: string | null) {
+  store.set(userId, { username, lastSeen: Date.now(), game, statusText });
 }
 
 export function isOnline(userId: string): boolean {
@@ -28,8 +29,8 @@ export function isOnline(userId: string): boolean {
   return Date.now() - entry.lastSeen < ONLINE_THRESHOLD_MS;
 }
 
-export function getPresence(userId: string): { game: string | null } | null {
+export function getPresence(userId: string): { game: string | null; statusText: string | null } | null {
   const entry = store.get(userId);
   if (!entry || !isOnline(userId)) return null;
-  return { game: entry.game };
+  return { game: entry.game, statusText: entry.statusText };
 }

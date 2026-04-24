@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { api } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
@@ -11,6 +11,13 @@ interface ReactionCount {
   userIds: string[];
 }
 
+interface ReplySnippet {
+  id: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+}
+
 interface ChatMessage {
   id: string;
   content: string;
@@ -18,6 +25,8 @@ interface ChatMessage {
   editedAt?: string | null;
   authorId: string;
   authorName: string;
+  channelId: string | null;
+  replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
 }
 
@@ -27,12 +36,14 @@ interface Props {
   currentUserId: string;
   currentUsername: string;
   isOwner: boolean;
+  channelId: string | null;
+  channelName: string;
   onToggleMembers?: () => void;
+  onOpenPins?: () => void;
   membersVisible?: boolean;
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
-const CHANNEL_NAME = "geral";
 
 function wsUrl(): string {
   return API_URL.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
@@ -76,7 +87,40 @@ function extractMedia(content: string): { url: string; isTenorEmbed: boolean } |
 function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
   if (!prev || prev.authorId !== curr.authorId) return false;
   if (!sameCalendarDay(prev.createdAt, curr.createdAt)) return false;
+  if (curr.replyTo) return false;
   return new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
+}
+
+const FORMAT_RE = /```([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
+
+function formatMessage(text: string, currentUsername: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let lastIdx = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  FORMAT_RE.lastIndex = 0;
+  while ((m = FORMAT_RE.exec(text)) !== null) {
+    if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
+    if (m[1] !== undefined) {
+      nodes.push(<pre key={key++} className="chat-msg-codeblock"><code>{m[1]}</code></pre>);
+    } else if (m[2] !== undefined) {
+      nodes.push(<code key={key++} className="chat-msg-code">{m[2]}</code>);
+    } else if (m[3] !== undefined) {
+      nodes.push(<strong key={key++}>{m[3]}</strong>);
+    } else if (m[4] !== undefined) {
+      nodes.push(<em key={key++}>{m[4]}</em>);
+    } else if (m[5] !== undefined) {
+      const isSelf = m[5].slice(1).toLowerCase() === currentUsername.toLowerCase();
+      nodes.push(
+        <span key={key++} className={`chat-mention${isSelf ? " self" : ""}`}>
+          {m[5]}
+        </span>
+      );
+    }
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
+  return nodes;
 }
 
 export function ChatPanel({
@@ -85,7 +129,10 @@ export function ChatPanel({
   currentUserId,
   currentUsername,
   isOwner,
+  channelId,
+  channelName,
   onToggleMembers,
+  onOpenPins,
   membersVisible,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -104,6 +151,7 @@ export function ChatPanel({
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string }> | null>(null);
   const [searching, setSearching] = useState(false);
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -145,6 +193,17 @@ export function ChatPanel({
     send({ type: "delete", id });
   }
 
+  async function togglePin(msg: ChatMessage) {
+    try {
+      await api.pinMessage(token, serverId, msg.id);
+    } catch (err) {
+      const apiErr = err as { status?: number };
+      if (apiErr?.status === 409) {
+        await api.unpinMessage(token, serverId, msg.id).catch(() => {});
+      }
+    }
+  }
+
   function scheduleMarkRead() {
     if (markReadTimer.current) return;
     markReadTimer.current = setTimeout(() => {
@@ -153,9 +212,19 @@ export function ChatPanel({
     }, 1500);
   }
 
+  function scrollToMessage(id: string) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.classList.add("chat-msg-flash");
+      setTimeout(() => el.classList.remove("chat-msg-flash"), 1500);
+    }
+  }
+
   useEffect(() => {
     setMessages([]);
     setHistoryLoaded(false);
+    setReplyTo(null);
     let cancelled = false;
     let retryDelay = 1000;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -179,6 +248,9 @@ export function ChatPanel({
       ws.onopen = () => {
         openedAt = Date.now();
         setConnected(true);
+        if (channelId !== null) {
+          ws.send(JSON.stringify({ type: "selectChannel", channelId }));
+        }
       };
 
       ws.onclose = () => {
@@ -192,20 +264,26 @@ export function ChatPanel({
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "history") {
-          if (data.prepend) {
-            setMessages((prev) => mergeHistory(data.messages, prev));
-            setHasMore(data.messages.length >= 40);
+          const incoming: ChatMessage[] = data.messages;
+          if (data.replace) {
+            setMessages(incoming);
+            setHasMore(incoming.length >= 80);
+            setHistoryLoaded(true);
+          } else if (data.prepend) {
+            setMessages((prev) => mergeHistory(incoming, prev));
+            setHasMore(incoming.length >= 40);
             setLoadingMore(false);
           } else {
-            setMessages((prev) => mergeHistory(prev, data.messages));
-            setHasMore(data.messages.length >= 80);
+            setMessages((prev) => mergeHistory(prev, incoming));
+            setHasMore(incoming.length >= 80);
             setHistoryLoaded(true);
           }
         } else if (data.type === "message") {
-          setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
-          if (data.authorId !== currentUserId) {
+          const msg = data as ChatMessage & { type: string };
+          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+          if (msg.authorId !== currentUserId && msg.channelId === channelId) {
             scheduleMarkRead();
-            const mentioned = (data.content as string).includes(`@${currentUsername}`);
+            const mentioned = msg.content.includes(`@${currentUsername}`);
             if (document.hidden || mentioned) playMessageSound();
           }
         } else if (data.type === "edit") {
@@ -217,6 +295,7 @@ export function ChatPanel({
         } else if (data.type === "delete") {
           setMessages((prev) => prev.filter((m) => m.id !== data.id));
           setEditingId((id) => (id === data.id ? null : id));
+          setReplyTo((r) => (r?.id === data.id ? null : r));
         } else if (data.type === "reactions") {
           setMessages((prev) =>
             prev.map((m) =>
@@ -224,6 +303,7 @@ export function ChatPanel({
             )
           );
         } else if (data.type === "typing") {
+          if (data.channelId !== channelId) return;
           setTypers((prev) => {
             const next = { ...prev };
             if (data.typing) next[data.userId] = data.username;
@@ -248,7 +328,7 @@ export function ChatPanel({
       }
       wsRef.current?.close();
     };
-  }, [serverId, token, currentUserId]);
+  }, [serverId, token, currentUserId, channelId]);
 
   useEffect(() => {
     if (!loadingMore) {
@@ -263,7 +343,10 @@ export function ChatPanel({
         setSearchOpen((v) => !v);
         setTimeout(() => searchInputRef.current?.focus(), 50);
       }
-      if (e.key === "Escape") setSearchOpen(false);
+      if (e.key === "Escape") {
+        setSearchOpen(false);
+        setReplyTo(null);
+      }
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
@@ -283,16 +366,18 @@ export function ChatPanel({
   }
 
   function loadMore() {
-    if (loadingMore || !hasMore || messages.length === 0) return;
-    const firstId = messages[0].id;
-    if (send({ type: "loadMore", before: firstId })) {
+    if (loadingMore || !hasMore) return;
+    const channelMessages = messages.filter((m) => m.channelId === channelId);
+    if (channelMessages.length === 0) return;
+    const firstId = channelMessages[0].id;
+    if (send({ type: "loadMore", before: firstId, channelId })) {
       setLoadingMore(true);
     }
   }
 
   function notifyTyping() {
     if (!input.trim()) return;
-    send({ type: "typing" });
+    send({ type: "typing", channelId });
     if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => { typingTimerRef.current = null; }, 3000);
   }
@@ -301,13 +386,17 @@ export function ChatPanel({
     e.preventDefault();
     const trimmed = input.trim();
     if (!trimmed) return;
-    if (send({ type: "message", content: trimmed })) {
+    const payload: Record<string, unknown> = { type: "message", content: trimmed, channelId };
+    if (replyTo) payload.replyToId = replyTo.id;
+    if (send(payload)) {
       setInput("");
+      setReplyTo(null);
       inputRef.current?.focus();
     }
   }
 
   const hasContent = input.trim().length > 0;
+  const visibleMessages = messages.filter((m) => m.channelId === channelId);
 
   return (
     <div className="chat-panel">
@@ -344,11 +433,11 @@ export function ChatPanel({
           <Ico.hash />
         </div>
         <div className="chat-header-title">
-          <div className="chat-header-name">#{CHANNEL_NAME}</div>
-          <div className="chat-header-sub">Canal geral — conversa do servidor</div>
+          <div className="chat-header-name">#{channelName}</div>
+          <div className="chat-header-sub">Canal de texto</div>
         </div>
         <div className="chat-header-spacer" />
-        <button className="chat-header-btn" title="Fixados">
+        <button className="chat-header-btn" title="Fixados" onClick={onOpenPins}>
           <Ico.pin />
         </button>
         <button
@@ -379,7 +468,7 @@ export function ChatPanel({
             <Ico.hash />
           </div>
           <h2>
-            Bem-vindo ao <span className="brand-text">#{CHANNEL_NAME}</span>
+            Bem-vindo ao <span className="brand-text">#{channelName}</span>
           </h2>
           <p>
             Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
@@ -400,15 +489,15 @@ export function ChatPanel({
           </div>
         )}
 
-        {historyLoaded && messages.length === 0 && (
+        {historyLoaded && visibleMessages.length === 0 && (
           <div className="chat-empty">
             <p>Nenhuma mensagem ainda.</p>
             <p>Seja o primeiro a falar!</p>
           </div>
         )}
 
-        {messages.map((msg, i) => {
-          const prev = messages[i - 1];
+        {visibleMessages.map((msg, i) => {
+          const prev = visibleMessages[i - 1];
           const grouped = shouldGroup(prev, msg);
           const showDate = i === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
           const isAuthor = msg.authorId === currentUserId;
@@ -420,6 +509,7 @@ export function ChatPanel({
               showDate={showDate}
               canEdit={isAuthor}
               canDelete={isAuthor || isOwner}
+              canPin={isOwner}
               isEditing={editingId === msg.id}
               editDraft={editDraft}
               currentUserId={currentUserId}
@@ -431,6 +521,9 @@ export function ChatPanel({
               onChangeEdit={setEditDraft}
               onDelete={() => deleteMessage(msg.id)}
               onReact={(emoji) => send({ type: "react", id: msg.id, emoji })}
+              onReply={() => { setReplyTo(msg); inputRef.current?.focus(); }}
+              onPin={() => togglePin(msg)}
+              onJumpTo={scrollToMessage}
             />
           );
         })}
@@ -438,6 +531,17 @@ export function ChatPanel({
       </div>
 
       <TypingBar typers={typers} />
+      {replyTo && (
+        <div className="chat-reply-bar">
+          <Ico.reply />
+          <span className="chat-reply-bar-text">
+            Respondendo a <strong>{replyTo.authorName}</strong>: <em>{replyTo.content.slice(0, 80)}{replyTo.content.length > 80 ? "…" : ""}</em>
+          </span>
+          <button type="button" onClick={() => setReplyTo(null)} title="Cancelar resposta">
+            <Ico.close />
+          </button>
+        </div>
+      )}
       <div className="chat-input-wrap">
         {mentionQuery !== null && (() => {
           const suggestions = members.filter(
@@ -488,7 +592,7 @@ export function ChatPanel({
           </button>
           <input
             ref={inputRef}
-            placeholder={connected ? `Escreva em #${CHANNEL_NAME}…` : "Conectando..."}
+            placeholder={connected ? `Escreva em #${channelName}…` : "Conectando..."}
             value={input}
             onChange={(e) => {
             const val = e.target.value;
@@ -524,7 +628,7 @@ export function ChatPanel({
           </button>
         </form>
         <div className="chat-input-hint">
-          <strong>enter</strong> para enviar · <strong>shift+enter</strong> nova linha
+          <strong>enter</strong> enviar · <strong>shift+enter</strong> nova linha · <strong>**negrito**</strong> · <strong>_itálico_</strong> · <strong>`código`</strong>
         </div>
       </div>
     </div>
@@ -537,6 +641,7 @@ interface MessageProps {
   showDate: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canPin: boolean;
   isEditing: boolean;
   editDraft: string;
   currentUserId: string;
@@ -548,6 +653,9 @@ interface MessageProps {
   onChangeEdit: (v: string) => void;
   onDelete: () => void;
   onReact: (emoji: string) => void;
+  onReply: () => void;
+  onPin: () => void;
+  onJumpTo: (id: string) => void;
 }
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
@@ -558,6 +666,7 @@ function Message({
   showDate,
   canEdit,
   canDelete,
+  canPin,
   isEditing,
   editDraft,
   currentUserId,
@@ -569,6 +678,9 @@ function Message({
   onChangeEdit,
   onDelete,
   onReact,
+  onReply,
+  onPin,
+  onJumpTo,
 }: MessageProps) {
   const [showReactPicker, setShowReactPicker] = useState(false);
   const isInvite = msg.content.startsWith("lobby://join/");
@@ -587,7 +699,18 @@ function Message({
           <div className="chat-date-line" />
         </div>
       )}
-      <div className={`chat-msg${grouped ? " grouped" : ""}`}>
+      <div id={`msg-${msg.id}`} className={`chat-msg${grouped ? " grouped" : ""}`}>
+        {msg.replyTo && (
+          <div
+            className="chat-msg-reply-to"
+            onClick={() => onJumpTo(msg.replyTo!.id)}
+            title="Ir para mensagem original"
+          >
+            <Ico.reply />
+            <span className="chat-msg-reply-to-author">{msg.replyTo.authorName}</span>
+            <span className="chat-msg-reply-to-text">{msg.replyTo.content}</span>
+          </div>
+        )}
         {!grouped ? (
           <Avatar name={msg.authorName} id={msg.authorId} size={38} />
         ) : (
@@ -638,7 +761,7 @@ function Message({
             <>
               {!contentIsOnlyUrl && (
                 <p className="chat-msg-content">
-                  {renderWithMentions(msg.content, currentUsername)}
+                  {formatMessage(msg.content, currentUsername)}
                   {msg.editedAt && <span className="chat-msg-edited"> (editado)</span>}
                 </p>
               )}
@@ -675,6 +798,14 @@ function Message({
                 </div>
               )}
             </div>
+            <button type="button" className="chat-msg-action-btn" title="Responder" onClick={onReply}>
+              <Ico.reply />
+            </button>
+            {canPin && (
+              <button type="button" className="chat-msg-action-btn" title="Fixar/desfixar" onClick={onPin}>
+                <Ico.pin />
+              </button>
+            )}
             {canEdit && (
               <button type="button" className="chat-msg-action-btn" title="Editar" onClick={onStartEdit}>
                 <Ico.edit />
@@ -705,21 +836,6 @@ function Message({
       </div>
     </>
   );
-}
-
-function renderWithMentions(content: string, currentUsername: string) {
-  const parts = content.split(/(@\w+)/g);
-  return parts.map((part, i) => {
-    if (/^@\w+$/.test(part)) {
-      const isSelf = part.slice(1).toLowerCase() === currentUsername.toLowerCase();
-      return (
-        <span key={i} className={`chat-mention${isSelf ? " self" : ""}`}>
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
 }
 
 function TypingBar({ typers }: { typers: Record<string, string> }) {

@@ -36,6 +36,7 @@ export function SettingsModal({ onClose }: Props) {
   const voice = useVoice();
 
   const [username, setUsername] = useState(user?.username ?? "");
+  const [statusText, setStatusText] = useState(user?.statusText ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -95,8 +96,11 @@ export function SettingsModal({ onClose }: Props) {
     setSaving(true);
     setSaveMsg(null);
     try {
-      const data: { username?: string; currentPassword?: string; newPassword?: string } = {};
+      const data: { username?: string; currentPassword?: string; newPassword?: string; statusText?: string | null } = {};
       if (username !== user?.username) data.username = username;
+      if ((user?.statusText ?? "") !== statusText) {
+        data.statusText = statusText.trim() || null;
+      }
       if (newPassword) {
         data.currentPassword = currentPassword;
         data.newPassword = newPassword;
@@ -171,6 +175,16 @@ export function SettingsModal({ onClose }: Props) {
                   minLength={3}
                   maxLength={32}
                   required
+                />
+              </label>
+
+              <label className="settings-label">
+                <span>Status customizado</span>
+                <input
+                  value={statusText}
+                  onChange={(e) => setStatusText(e.target.value)}
+                  maxLength={128}
+                  placeholder="Ex: Em reunião, AFK, Codando..."
                 />
               </label>
 

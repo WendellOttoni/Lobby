@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
-import { api, Room, Server } from "../lib/api";
+import { api, Room, Server, TextChannel } from "../lib/api";
 import { ChatPanel } from "../components/ChatPanel";
 import { MemberList } from "../components/MemberList";
 import { VoiceBar } from "../components/VoiceBar";
@@ -11,6 +11,7 @@ import { Avatar } from "../components/Avatar";
 import { WaveBars } from "../components/WaveBars";
 import { Ico } from "../components/icons";
 import { ParticipantContextMenu } from "../components/ParticipantContextMenu";
+import { PinsModal } from "../components/PinsModal";
 import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServerPage() {
@@ -21,6 +22,11 @@ export function ServerPage() {
 
   const [server, setServer] = useState<Server | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [channels, setChannels] = useState<TextChannel[]>([]);
+  const [currentChannelId, setCurrentChannelId] = useState<string | null>(null);
+  const [showPins, setShowPins] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [showNewChannel, setShowNewChannel] = useState(false);
   const [newRoomName, setNewRoomName] = useState("");
   const [showNewRoom, setShowNewRoom] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -55,14 +61,17 @@ export function ServerPage() {
   useEffect(() => {
     if (!token || !serverId) return;
     setLoading(true);
+    setCurrentChannelId(null);
 
     Promise.all([
       api.getServer(token, serverId),
       api.listRooms(token, serverId),
+      api.listChannels(token, serverId),
     ])
-      .then(([{ server }, { rooms }]) => {
+      .then(([{ server }, { rooms }, { channels }]) => {
         setServer(server);
         setRooms(rooms);
+        setChannels(channels);
         setInviteCode(server.inviteCode);
         setError(null);
       })
@@ -76,6 +85,33 @@ export function ServerPage() {
     navigator.clipboard.writeText(text);
     setCopiedMsg(label);
     setTimeout(() => setCopiedMsg(null), 2000);
+  }
+
+  async function onCreateChannel(e: FormEvent) {
+    e.preventDefault();
+    if (!token || !serverId || !newChannelName.trim()) return;
+    try {
+      const { channel } = await api.createChannel(token, serverId, newChannelName.trim());
+      setChannels((prev) => [...prev, channel]);
+      setNewChannelName("");
+      setShowNewChannel(false);
+      setCurrentChannelId(channel.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao criar canal");
+    }
+  }
+
+  async function handleDeleteChannel(channel: TextChannel, e: React.MouseEvent) {
+    e.stopPropagation();
+    if (!token || !serverId) return;
+    if (!window.confirm(`Deletar o canal "#${channel.name}"?`)) return;
+    try {
+      await api.deleteChannel(token, serverId, channel.id);
+      setChannels((prev) => prev.filter((c) => c.id !== channel.id));
+      if (currentChannelId === channel.id) setCurrentChannelId(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao deletar canal");
+    }
   }
 
   async function onCreateRoom(e: FormEvent) {
@@ -161,7 +197,12 @@ export function ServerPage() {
   const filteredRooms = rooms.filter((r) =>
     search ? r.name.toLowerCase().includes(search.toLowerCase()) : true
   );
-  const textChannelActive = !search || "geral".includes(search.toLowerCase());
+  const filteredChannels = channels.filter((c) =>
+    search ? c.name.toLowerCase().includes(search.toLowerCase()) : true
+  );
+  const showGeneralChannel = !search || "geral".includes(search.toLowerCase());
+  const currentChannel = channels.find((c) => c.id === currentChannelId) ?? null;
+  const activeChannelName = currentChannel?.name ?? "geral";
 
   if (loading && !server) {
     return <div className="server-loading">Carregando...</div>;
@@ -305,19 +346,59 @@ export function ServerPage() {
           )}
 
           {/* Text section */}
-          {textChannelActive && (
-            <>
-              <SectionLabel label="Texto" />
-              <button className="channel-row active">
-                <div className="channel-row-head">
-                  <span className="channel-row-icon">
-                    <Ico.hash />
-                  </span>
-                  <span className="channel-row-name">geral</span>
-                </div>
+          <SectionLabel
+            label="Texto"
+            onAdd={isOwner ? () => setShowNewChannel((v) => !v) : undefined}
+          />
+
+          {showNewChannel && (
+            <form onSubmit={onCreateChannel} className="rooms-new-room">
+              <input
+                placeholder="Nome do canal..."
+                value={newChannelName}
+                onChange={(e) => setNewChannelName(e.target.value)}
+                maxLength={64}
+                autoFocus
+              />
+              <button type="submit" disabled={!newChannelName.trim()}>
+                ✓
               </button>
-            </>
+            </form>
           )}
+
+          {showGeneralChannel && (
+            <button
+              className={`channel-row${currentChannelId === null ? " active" : ""}`}
+              onClick={() => setCurrentChannelId(null)}
+            >
+              <div className="channel-row-head">
+                <span className="channel-row-icon"><Ico.hash /></span>
+                <span className="channel-row-name">geral</span>
+              </div>
+            </button>
+          )}
+
+          {filteredChannels.map((c) => (
+            <button
+              key={c.id}
+              className={`channel-row${currentChannelId === c.id ? " active" : ""}`}
+              onClick={() => setCurrentChannelId(c.id)}
+            >
+              <div className="channel-row-head">
+                <span className="channel-row-icon"><Ico.hash /></span>
+                <span className="channel-row-name">{c.name}</span>
+                {isOwner && (
+                  <span
+                    className="channel-row-delete"
+                    onClick={(e) => handleDeleteChannel(c, e)}
+                    title="Deletar canal"
+                  >
+                    ×
+                  </span>
+                )}
+              </div>
+            </button>
+          ))}
 
           {/* Voice section */}
           <SectionLabel
@@ -440,8 +521,20 @@ export function ServerPage() {
           currentUserId={user.id}
           currentUsername={user.username}
           isOwner={isOwner}
+          channelId={currentChannelId}
+          channelName={activeChannelName}
           onToggleMembers={() => setShowMembers((v) => !v)}
+          onOpenPins={() => setShowPins(true)}
           membersVisible={showMembers}
+        />
+      )}
+
+      {showPins && token && serverId && (
+        <PinsModal
+          token={token}
+          serverId={serverId}
+          isOwner={isOwner}
+          onClose={() => setShowPins(false)}
         />
       )}
 

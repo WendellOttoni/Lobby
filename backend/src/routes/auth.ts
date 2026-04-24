@@ -97,7 +97,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const user = await prisma.user.findUnique({
         where: { id: sub },
-        select: { id: true, username: true, email: true, createdAt: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true },
       });
 
       if (!user) {
@@ -114,7 +114,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { sub, username } = request.user as { sub: string; username: string };
       const { game } = (request.body ?? {}) as { game?: string | null };
-      updatePresence(sub, username, game ?? null);
+      const user = await prisma.user.findUnique({ where: { id: sub }, select: { statusText: true } });
+      updatePresence(sub, username, game ?? null, user?.statusText ?? null);
       return reply.status(204).send();
     }
   );
@@ -124,15 +125,21 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate] },
     async (request, reply) => {
       const { sub } = request.user as { sub: string };
-      const { username, currentPassword, newPassword } = request.body as {
+      const { username, currentPassword, newPassword, statusText } = request.body as {
         username?: string;
         currentPassword?: string;
         newPassword?: string;
+        statusText?: string | null;
       };
 
       const user = await prisma.user.findUniqueOrThrow({ where: { id: sub } });
 
-      const updates: { username?: string; passwordHash?: string } = {};
+      const updates: { username?: string; passwordHash?: string; statusText?: string | null } = {};
+
+      if (statusText !== undefined) {
+        const trimmed = statusText === null ? null : String(statusText).trim().slice(0, 128);
+        updates.statusText = trimmed && trimmed.length > 0 ? trimmed : null;
+      }
 
       if (username && username !== user.username) {
         const taken = await prisma.user.findUnique({ where: { username } });
@@ -159,7 +166,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const updated = await prisma.user.update({
         where: { id: sub },
         data: updates,
-        select: { id: true, username: true, email: true, createdAt: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true },
       });
 
       return reply.send({ user: updated });

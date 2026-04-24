@@ -12,12 +12,14 @@ model User {
   email        String   @unique
   passwordHash String
   createdAt    DateTime @default(now())
+  statusText   String?  @db.VarChar(128)
 
-  ownedServers      Server[]       @relation("ServerOwner")
+  ownedServers      Server[]          @relation("ServerOwner")
   serverMemberships ServerMember[]
   roomMemberships   RoomMember[]
   messages          Message[]
   reactions         MessageReaction[]
+  pins              MessagePin[]
 }
 
 model Server {
@@ -30,6 +32,7 @@ model Server {
   owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members  ServerMember[]
   rooms    Room[]
+  channels TextChannel[]
   messages Message[]
 }
 
@@ -69,6 +72,18 @@ model RoomMember {
   @@unique([userId, roomId])
 }
 
+model TextChannel {
+  id        String   @id @default(cuid())
+  name      String
+  serverId  String
+  createdAt DateTime @default(now())
+
+  server   Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([serverId])
+}
+
 model MessageReaction {
   id        String   @id @default(cuid())
   messageId String
@@ -83,17 +98,38 @@ model MessageReaction {
   @@index([messageId])
 }
 
-model Message {
-  id        String    @id @default(cuid())
-  content   String    @db.VarChar(2000)
-  createdAt DateTime  @default(now())
-  editedAt  DateTime?
-  authorId  String
+model MessagePin {
+  id        String   @id @default(cuid())
+  messageId String   @unique
   serverId  String
+  channelId String?
+  pinnedBy  String
+  pinnedAt  DateTime @default(now())
 
-  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  server    Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  reactions MessageReaction[]
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinner  User    @relation(fields: [pinnedBy], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+}
+
+model Message {
+  id          String    @id @default(cuid())
+  content     String    @db.VarChar(2000)
+  createdAt   DateTime  @default(now())
+  editedAt    DateTime?
+  authorId    String
+  serverId    String
+  channelId   String?
+  replyToId   String?
+
+  author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  server      Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  channel     TextChannel?      @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  replyTo     Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     Message[]         @relation("MessageReplies")
+  reactions   MessageReaction[]
+  pin         MessagePin?
 
   @@index([serverId, createdAt])
+  @@index([channelId, createdAt])
 }

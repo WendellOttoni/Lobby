@@ -352,6 +352,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
           role: m.role,
           online,
           game: presence?.game ?? null,
+          statusText: presence?.statusText ?? null,
         };
       }),
     });

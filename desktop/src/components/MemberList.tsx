@@ -88,6 +88,9 @@ function MemberRow({ member, online }: { member: Member; online: boolean }) {
         {online && member.game && (
           <div className="member-row-sub">Jogando {member.game}</div>
         )}
+        {online && !member.game && member.statusText && (
+          <div className="member-row-sub">{member.statusText}</div>
+        )}
       </div>
     </div>
   );

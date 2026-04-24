@@ -8,6 +8,13 @@ interface ReactionCount {
   userIds: string[];
 }
 
+interface ReplySnippet {
+  id: string;
+  content: string;
+  authorId: string;
+  authorName: string;
+}
+
 interface ChatMessage {
   id: string;
   content: string;
@@ -15,6 +22,8 @@ interface ChatMessage {
   editedAt: string | null;
   authorId: string;
   authorName: string;
+  channelId: string | null;
+  replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
 }
 
@@ -57,19 +66,19 @@ function broadcast(serverId: string, payload: string, excludeUserId?: string) {
   });
 }
 
-function broadcastTyping(serverId: string, userId: string, username: string, typing: boolean) {
+function broadcastTyping(serverId: string, userId: string, username: string, typing: boolean, channelId: string | null) {
   broadcast(
     serverId,
-    JSON.stringify({ type: "typing", userId, username, typing }),
+    JSON.stringify({ type: "typing", userId, username, typing, channelId }),
     userId
   );
 }
 
-function stopTyping(serverId: string, userId: string, username: string) {
+function stopTyping(serverId: string, userId: string, username: string, channelId: string | null) {
   const key = `${serverId}:${userId}`;
   const existing = typingTimers.get(key);
   if (existing) { clearTimeout(existing); typingTimers.delete(key); }
-  broadcastTyping(serverId, userId, username, false);
+  broadcastTyping(serverId, userId, username, false, channelId);
 }
 
 function groupReactions(rows: { emoji: string; userId: string }[]): ReactionCount[] {
@@ -81,16 +90,72 @@ function groupReactions(rows: { emoji: string; userId: string }[]): ReactionCoun
   return Array.from(map.entries()).map(([emoji, userIds]) => ({ emoji, count: userIds.length, userIds }));
 }
 
-function touchTyping(serverId: string, userId: string, username: string) {
+function touchTyping(serverId: string, userId: string, username: string, channelId: string | null) {
   const key = `${serverId}:${userId}`;
   const existing = typingTimers.get(key);
-  if (!existing) broadcastTyping(serverId, userId, username, true);
+  if (!existing) broadcastTyping(serverId, userId, username, true, channelId);
   else clearTimeout(existing);
   typingTimers.set(key, setTimeout(() => {
     typingTimers.delete(key);
-    broadcastTyping(serverId, userId, username, false);
+    broadcastTyping(serverId, userId, username, false, channelId);
   }, 4000));
 }
+
+function snippet(content: string): string {
+  const trimmed = content.trim().replace(/\s+/g, " ");
+  return trimmed.length > 120 ? trimmed.slice(0, 117) + "..." : trimmed;
+}
+
+type MessageWithRels = {
+  id: string;
+  content: string;
+  createdAt: Date;
+  editedAt: Date | null;
+  authorId: string;
+  channelId: string | null;
+  author: { username: string };
+  reactions: { emoji: string; userId: string }[];
+  replyTo: {
+    id: string;
+    content: string;
+    authorId: string;
+    author: { username: string };
+  } | null;
+};
+
+function serialize(m: MessageWithRels): ChatMessage {
+  return {
+    id: m.id,
+    content: m.content,
+    createdAt: m.createdAt.toISOString(),
+    editedAt: m.editedAt?.toISOString() ?? null,
+    authorId: m.authorId,
+    authorName: m.author.username,
+    channelId: m.channelId,
+    replyTo: m.replyTo
+      ? {
+          id: m.replyTo.id,
+          content: snippet(m.replyTo.content),
+          authorId: m.replyTo.authorId,
+          authorName: m.replyTo.author.username,
+        }
+      : null,
+    reactions: groupReactions(m.reactions),
+  };
+}
+
+const MESSAGE_INCLUDE = {
+  author: { select: { username: true } },
+  reactions: { select: { emoji: true, userId: true } },
+  replyTo: {
+    select: {
+      id: true,
+      content: true,
+      authorId: true,
+      author: { select: { username: true } },
+    },
+  },
+} as const;
 
 const heartbeatTimer = setInterval(() => {
   for (const [serverId, conns] of rooms) {
@@ -116,7 +181,6 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId } = req.params as { serverId: string };
       const token = (req.query as Record<string, string>).token;
 
-      // Verify JWT and extract user
       let userId: string;
       let username: string;
       try {
@@ -132,7 +196,6 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         return;
       }
 
-      // Check server membership
       const member = await prisma.serverMember.findUnique({
         where: { userId_serverId: { userId, serverId } },
       });
@@ -141,7 +204,6 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         return;
       }
 
-      // Join room
       if (!rooms.has(serverId)) rooms.set(serverId, new Set());
       const conn: Connection = {
         ws: socket,
@@ -156,28 +218,16 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         conn.isAlive = true;
       });
 
-      // Send history (last 80 messages, oldest first)
       const history = await prisma.message.findMany({
         where: { serverId },
         orderBy: { createdAt: "asc" },
         take: 80,
-        include: {
-          author: { select: { username: true } },
-          reactions: { select: { emoji: true, userId: true } },
-        },
+        include: MESSAGE_INCLUDE,
       });
       socket.send(
         JSON.stringify({
           type: "history",
-          messages: history.map((m): ChatMessage => ({
-            id: m.id,
-            content: m.content,
-            createdAt: m.createdAt.toISOString(),
-            editedAt: m.editedAt?.toISOString() ?? null,
-            authorId: m.authorId,
-            authorName: m.author.username,
-            reactions: groupReactions(m.reactions),
-          })),
+          messages: history.map(serialize),
         })
       );
 
@@ -189,66 +239,91 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         try {
           const data = JSON.parse(raw.toString());
 
+          if (data.type === "selectChannel") {
+            const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            const history = await prisma.message.findMany({
+              where: { serverId, channelId },
+              orderBy: { createdAt: "asc" },
+              take: 80,
+              include: MESSAGE_INCLUDE,
+            });
+            socket.send(JSON.stringify({
+              type: "history",
+              channelId,
+              replace: true,
+              messages: history.map(serialize),
+            }));
+            return;
+          }
+
           if (data.type === "loadMore") {
             const beforeId = typeof data.before === "string" ? data.before : null;
             if (!beforeId) return;
+            const channelId = typeof data.channelId === "string" ? data.channelId : null;
             const anchor = await prisma.message.findUnique({ where: { id: beforeId }, select: { createdAt: true } });
             if (!anchor) return;
             const older = await prisma.message.findMany({
-              where: { serverId, createdAt: { lt: anchor.createdAt } },
+              where: {
+                serverId,
+                createdAt: { lt: anchor.createdAt },
+                channelId,
+              },
               orderBy: { createdAt: "desc" },
               take: 40,
-              include: {
-                author: { select: { username: true } },
-                reactions: { select: { emoji: true, userId: true } },
-              },
+              include: MESSAGE_INCLUDE,
             });
             socket.send(JSON.stringify({
               type: "history",
               prepend: true,
-              messages: older.reverse().map((m) => ({
-                id: m.id,
-                content: m.content,
-                createdAt: m.createdAt.toISOString(),
-                editedAt: m.editedAt?.toISOString() ?? null,
-                authorId: m.authorId,
-                authorName: m.author.username,
-                reactions: groupReactions(m.reactions),
-              })),
+              channelId,
+              messages: older.reverse().map(serialize),
             }));
             return;
           }
 
           if (data.type === "typing") {
-            touchTyping(serverId, userId, username);
+            const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            touchTyping(serverId, userId, username, channelId);
             return;
           }
 
           if (data.type === "message") {
             if (!data.content?.trim()) return;
-            stopTyping(serverId, userId, username);
+            const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            const replyToId = typeof data.replyToId === "string" ? data.replyToId : null;
+            stopTyping(serverId, userId, username, channelId);
             if (!consumeToken(conn.bucket)) {
               sendError("Você está enviando mensagens muito rápido. Aguarde alguns segundos.");
               return;
             }
 
+            if (channelId) {
+              const channel = await prisma.textChannel.findUnique({ where: { id: channelId } });
+              if (!channel || channel.serverId !== serverId) {
+                sendError("Canal inválido.");
+                return;
+              }
+            }
+
+            if (replyToId) {
+              const target = await prisma.message.findUnique({ where: { id: replyToId } });
+              if (!target || target.serverId !== serverId) {
+                sendError("Mensagem citada não encontrada.");
+                return;
+              }
+            }
+
             const content = String(data.content).trim().slice(0, 2000);
             const msg = await prisma.message.create({
-              data: { content, authorId: userId, serverId },
-              include: { author: { select: { username: true } } },
+              data: { content, authorId: userId, serverId, channelId, replyToId },
+              include: MESSAGE_INCLUDE,
             });
 
             broadcast(
               serverId,
               JSON.stringify({
                 type: "message",
-                id: msg.id,
-                content: msg.content,
-                createdAt: msg.createdAt.toISOString(),
-                editedAt: null,
-                authorId: msg.authorId,
-                authorName: msg.author.username,
-                reactions: [],
+                ...serialize(msg),
               })
             );
             return;
@@ -339,7 +414,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       socket.on("close", () => {
-        stopTyping(serverId, userId, username);
+        stopTyping(serverId, userId, username, null);
         rooms.get(serverId)?.delete(conn);
         if (rooms.get(serverId)?.size === 0) rooms.delete(serverId);
       });

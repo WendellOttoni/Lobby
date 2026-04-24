@@ -5,6 +5,30 @@ export interface User {
   username: string;
   email: string;
   createdAt: string;
+  statusText?: string | null;
+}
+
+export interface TextChannel {
+  id: string;
+  name: string;
+  serverId: string;
+  createdAt: string;
+}
+
+export interface PinnedMessage {
+  id: string;
+  messageId: string;
+  channelId: string | null;
+  pinnedBy: string;
+  pinnerName: string;
+  pinnedAt: string;
+  message: {
+    id: string;
+    content: string;
+    createdAt: string;
+    authorId: string;
+    authorName: string;
+  } | null;
 }
 
 export interface Server {
@@ -36,6 +60,7 @@ export interface Member {
   role: string;
   online: boolean;
   game: string | null;
+  statusText: string | null;
 }
 
 export interface AuthResponse {
@@ -143,11 +168,39 @@ export const api = {
       token,
     }),
 
-  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string }) =>
+  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string; statusText?: string | null }) =>
     request<{ user: User }>("/auth/me", {
       method: "PATCH",
       token,
       body: JSON.stringify(data),
+    }),
+
+  listChannels: (token: string, serverId: string) =>
+    request<{ channels: TextChannel[] }>(`/servers/${serverId}/channels`, { token }),
+
+  createChannel: (token: string, serverId: string, name: string) =>
+    request<{ channel: TextChannel }>(`/servers/${serverId}/channels`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteChannel: (token: string, serverId: string, channelId: string) =>
+    request<void>(`/servers/${serverId}/channels/${channelId}`, { method: "DELETE", token }),
+
+  listPins: (token: string, serverId: string) =>
+    request<{ pins: PinnedMessage[] }>(`/servers/${serverId}/pins`, { token }),
+
+  pinMessage: (token: string, serverId: string, messageId: string) =>
+    request<{ pin: PinnedMessage }>(`/servers/${serverId}/pins/${messageId}`, {
+      method: "POST",
+      token,
+    }),
+
+  unpinMessage: (token: string, serverId: string, messageId: string) =>
+    request<void>(`/servers/${serverId}/pins/${messageId}`, {
+      method: "DELETE",
+      token,
     }),
 
   deleteServer: (token: string, serverId: string) =>
