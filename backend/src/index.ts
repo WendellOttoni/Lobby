@@ -7,6 +7,7 @@ import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
 import serversRoutes from "./routes/servers.js";
 import chatRoutes from "./routes/chat.js";
+import unfurlRoutes from "./routes/unfurl.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
 import { validateEnv } from "./env.js";
@@ -54,6 +55,7 @@ fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });
 fastify.register(serversRoutes, { prefix: "/servers" });
 fastify.register(chatRoutes);
+fastify.register(unfurlRoutes);
 
 fastify.get("/health", async (_, reply) => {
   const checks: Record<string, "ok" | "fail"> = {};

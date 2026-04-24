@@ -31,6 +31,7 @@ export function ServerPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
+  const [showTransfer, setShowTransfer] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{
     identity: string;
     name: string;
@@ -126,6 +127,19 @@ export function ServerPage() {
     }
   }
 
+  async function handleTransferOwnership(newOwnerId: string, newOwnerName: string) {
+    if (!token || !serverId) return;
+    if (!window.confirm(`Transferir o servidor para ${newOwnerName}? Você vai virar membro comum.`)) return;
+    try {
+      await api.transferOwnership(token, serverId, newOwnerId);
+      setShowTransfer(false);
+      const [{ server: s }] = await Promise.all([api.getServer(token, serverId)]);
+      setServer(s);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao transferir");
+    }
+  }
+
   async function handleDeleteServer() {
     if (!token || !serverId) return;
     if (!window.confirm(`Deletar o servidor "${server?.name}" permanentemente? Isso remove todas as salas e mensagens.`)) return;
@@ -200,6 +214,15 @@ export function ServerPage() {
                 >
                   Convite
                 </button>
+                {isOwner && (
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setShowTransfer(true); setMenuOpen(false); }}
+                    style={{ background: "transparent", justifyContent: "flex-start" }}
+                  >
+                    Transferir servidor
+                  </button>
+                )}
                 {isOwner ? (
                   <button
                     className="btn-secondary"
@@ -415,6 +438,7 @@ export function ServerPage() {
           serverId={serverId}
           token={token}
           currentUserId={user.id}
+          currentUsername={user.username}
           isOwner={isOwner}
           onToggleMembers={() => setShowMembers((v) => !v)}
           membersVisible={showMembers}
@@ -424,6 +448,16 @@ export function ServerPage() {
       {/* ── Members ── */}
       {showMembers && token && serverId && (
         <MemberList serverId={serverId} token={token} />
+      )}
+
+      {showTransfer && token && serverId && user && (
+        <TransferModal
+          token={token}
+          serverId={serverId}
+          currentUserId={user.id}
+          onTransfer={handleTransferOwnership}
+          onClose={() => setShowTransfer(false)}
+        />
       )}
 
       {ctxMenu && (
@@ -437,6 +471,56 @@ export function ServerPage() {
           onClose={() => setCtxMenu(null)}
         />
       )}
+    </div>
+  );
+}
+
+function TransferModal({
+  token,
+  serverId,
+  currentUserId,
+  onTransfer,
+  onClose,
+}: {
+  token: string;
+  serverId: string;
+  currentUserId: string;
+  onTransfer: (id: string, name: string) => void;
+  onClose: () => void;
+}) {
+  const [members, setMembers] = useState<import("../lib/api").Member[]>([]);
+
+  useEffect(() => {
+    api.listMembers(token, serverId).then(({ members }) =>
+      setMembers(members.filter((m) => m.id !== currentUserId))
+    ).catch(() => {});
+  }, [token, serverId, currentUserId]);
+
+  return (
+    <div className="ctx-menu-overlay" onClick={onClose}>
+      <div className="ctx-menu" style={{ minWidth: 240 }} onClick={(e) => e.stopPropagation()}>
+        <div className="ctx-menu-header">Transferir servidor</div>
+        <p style={{ fontSize: 12, color: "var(--text-dim)", padding: "4px 0 8px" }}>
+          Escolha o novo dono. Você vira membro.
+        </p>
+        {members.length === 0 && (
+          <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Sem outros membros.</p>
+        )}
+        {members.map((m) => (
+          <button
+            key={m.id}
+            className="btn-secondary"
+            style={{ width: "100%", justifyContent: "flex-start", marginBottom: 4 }}
+            onClick={() => onTransfer(m.id, m.username)}
+          >
+            {m.username}
+            {m.role === "owner" && " (dono)"}
+          </button>
+        ))}
+        <div className="ctx-menu-actions" style={{ marginTop: 8 }}>
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+        </div>
+      </div>
     </div>
   );
 }

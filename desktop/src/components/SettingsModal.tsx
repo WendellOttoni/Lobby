@@ -5,6 +5,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { enable as autostartEnable, disable as autostartDisable, isEnabled as autostartIsEnabled } from "@tauri-apps/plugin-autostart";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice, isNotifyJoinEnabled, setNotifyJoinEnabled } from "../contexts/VoiceContext";
+import { isSoundEnabled, setSoundEnabled } from "../lib/sounds";
 import { api, User } from "../lib/api";
 
 interface Props {
@@ -47,11 +48,18 @@ export function SettingsModal({ onClose }: Props) {
   const [recordingPTT, setRecordingPTT] = useState(false);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [notifyJoin, setNotifyJoin] = useState(() => isNotifyJoinEnabled());
+  const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
 
   function toggleNotifyJoin() {
     const next = !notifyJoin;
     setNotifyJoin(next);
     setNotifyJoinEnabled(next);
+  }
+
+  function toggleSound() {
+    const next = !soundEnabled;
+    setSoundEnabledState(next);
+    setSoundEnabled(next);
   }
 
   useEffect(() => {
@@ -219,6 +227,15 @@ export function SettingsModal({ onClose }: Props) {
                   onClick={toggleNotifyJoin}
                 >
                   {notifyJoin ? "Ativado" : "Desativado"}
+                </button>
+              </label>
+              <label className="settings-toggle-row">
+                <span>Som ao receber mensagem</span>
+                <button
+                  className={`settings-toggle ${soundEnabled ? "on" : "off"}`}
+                  onClick={toggleSound}
+                >
+                  {soundEnabled ? "Ativado" : "Desativado"}
                 </button>
               </label>
             </div>

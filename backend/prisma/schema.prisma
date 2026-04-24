@@ -17,6 +17,7 @@ model User {
   serverMemberships ServerMember[]
   roomMemberships   RoomMember[]
   messages          Message[]
+  reactions         MessageReaction[]
 }
 
 model Server {
@@ -68,6 +69,20 @@ model RoomMember {
   @@unique([userId, roomId])
 }
 
+model MessageReaction {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  emoji     String   @db.VarChar(16)
+  createdAt DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@index([messageId])
+}
+
 model Message {
   id        String    @id @default(cuid())
   content   String    @db.VarChar(2000)
@@ -76,8 +91,9 @@ model Message {
   authorId  String
   serverId  String
 
-  author User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  author    User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  server    Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  reactions MessageReaction[]
 
   @@index([serverId, createdAt])
 }

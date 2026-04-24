@@ -1,8 +1,15 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { api } from "../lib/api";
+import { playMessageSound } from "../lib/sounds";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
+
+interface ReactionCount {
+  emoji: string;
+  count: number;
+  userIds: string[];
+}
 
 interface ChatMessage {
   id: string;
@@ -11,12 +18,14 @@ interface ChatMessage {
   editedAt?: string | null;
   authorId: string;
   authorName: string;
+  reactions: ReactionCount[];
 }
 
 interface Props {
   serverId: string;
   token: string;
   currentUserId: string;
+  currentUsername: string;
   isOwner: boolean;
   onToggleMembers?: () => void;
   membersVisible?: boolean;
@@ -74,6 +83,7 @@ export function ChatPanel({
   serverId,
   token,
   currentUserId,
+  currentUsername,
   isOwner,
   onToggleMembers,
   membersVisible,
@@ -85,6 +95,18 @@ export function ChatPanel({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [typers, setTypers] = useState<Record<string, string>>({});
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [members, setMembers] = useState<string[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string }> | null>(null);
+  const [searching, setSearching] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -170,12 +192,21 @@ export function ChatPanel({
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === "history") {
-          setMessages((prev) => mergeHistory(prev, data.messages));
-          setHistoryLoaded(true);
+          if (data.prepend) {
+            setMessages((prev) => mergeHistory(data.messages, prev));
+            setHasMore(data.messages.length >= 40);
+            setLoadingMore(false);
+          } else {
+            setMessages((prev) => mergeHistory(prev, data.messages));
+            setHasMore(data.messages.length >= 80);
+            setHistoryLoaded(true);
+          }
         } else if (data.type === "message") {
           setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
           if (data.authorId !== currentUserId) {
             scheduleMarkRead();
+            const mentioned = (data.content as string).includes(`@${currentUsername}`);
+            if (document.hidden || mentioned) playMessageSound();
           }
         } else if (data.type === "edit") {
           setMessages((prev) =>
@@ -186,11 +217,27 @@ export function ChatPanel({
         } else if (data.type === "delete") {
           setMessages((prev) => prev.filter((m) => m.id !== data.id));
           setEditingId((id) => (id === data.id ? null : id));
+        } else if (data.type === "reactions") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.messageId ? { ...m, reactions: data.reactions } : m
+            )
+          );
+        } else if (data.type === "typing") {
+          setTypers((prev) => {
+            const next = { ...prev };
+            if (data.typing) next[data.userId] = data.username;
+            else delete next[data.userId];
+            return next;
+          });
         }
       };
     }
 
     open();
+    api.listMembers(token, serverId)
+      .then(({ members }) => setMembers(members.map((m) => m.username)))
+      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -204,8 +251,51 @@ export function ChatPanel({
   }, [serverId, token, currentUserId]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (!loadingMore) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
   }, [messages]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "f") {
+        e.preventDefault();
+        setSearchOpen((v) => !v);
+        setTimeout(() => searchInputRef.current?.focus(), 50);
+      }
+      if (e.key === "Escape") setSearchOpen(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  async function runSearch(q: string) {
+    if (q.trim().length < 2) { setSearchResults(null); return; }
+    setSearching(true);
+    try {
+      const { results } = await api.searchMessages(token, serverId, q);
+      setSearchResults(results);
+    } catch {
+      setSearchResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function loadMore() {
+    if (loadingMore || !hasMore || messages.length === 0) return;
+    const firstId = messages[0].id;
+    if (send({ type: "loadMore", before: firstId })) {
+      setLoadingMore(true);
+    }
+  }
+
+  function notifyTyping() {
+    if (!input.trim()) return;
+    send({ type: "typing" });
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => { typingTimerRef.current = null; }, 3000);
+  }
 
   function sendForm(e: FormEvent) {
     e.preventDefault();
@@ -221,6 +311,34 @@ export function ChatPanel({
 
   return (
     <div className="chat-panel">
+      {searchOpen && (
+        <div className="chat-search-bar">
+          <Ico.search />
+          <input
+            ref={searchInputRef}
+            placeholder="Buscar mensagens... (Esc para fechar)"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); runSearch(e.target.value); }}
+            autoComplete="off"
+          />
+          {searching && <span className="chat-search-spinner">…</span>}
+          <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); }}>
+            <Ico.close />
+          </button>
+        </div>
+      )}
+      {searchOpen && searchResults !== null && (
+        <div className="chat-search-results">
+          {searchResults.length === 0 && <p className="chat-search-empty">Nenhum resultado.</p>}
+          {searchResults.map((r) => (
+            <div key={r.id} className="chat-search-result">
+              <span className="chat-search-result-author">{r.authorName}</span>
+              <span className="chat-search-result-time">{formatTime(r.createdAt)}</span>
+              <p className="chat-search-result-content">{r.content}</p>
+            </div>
+          ))}
+        </div>
+      )}
       <div className="chat-header">
         <div className="chat-header-tile">
           <Ico.hash />
@@ -247,7 +365,15 @@ export function ChatPanel({
         </span>
       </div>
 
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scrollRef} onScroll={(e) => {
+        if ((e.currentTarget as HTMLDivElement).scrollTop < 80) loadMore();
+      }}>
+        {loadingMore && <div className="chat-load-more-spinner">Carregando...</div>}
+        {!loadingMore && hasMore && (
+          <button className="chat-load-more-btn" onClick={loadMore}>
+            Carregar mensagens anteriores
+          </button>
+        )}
         <div className="chat-intro">
           <div className="chat-intro-tile">
             <Ico.hash />
@@ -296,18 +422,48 @@ export function ChatPanel({
               canDelete={isAuthor || isOwner}
               isEditing={editingId === msg.id}
               editDraft={editDraft}
+              currentUserId={currentUserId}
+              currentUsername={currentUsername}
+              token={token}
               onStartEdit={() => startEdit(msg)}
               onCancelEdit={cancelEdit}
               onCommitEdit={commitEdit}
               onChangeEdit={setEditDraft}
               onDelete={() => deleteMessage(msg.id)}
+              onReact={(emoji) => send({ type: "react", id: msg.id, emoji })}
             />
           );
         })}
         <div ref={bottomRef} style={{ height: 12 }} />
       </div>
 
+      <TypingBar typers={typers} />
       <div className="chat-input-wrap">
+        {mentionQuery !== null && (() => {
+          const suggestions = members.filter(
+            (m) => m !== currentUsername && m.toLowerCase().startsWith(mentionQuery.toLowerCase())
+          ).slice(0, 6);
+          if (suggestions.length === 0) return null;
+          return (
+            <div className="chat-mention-list">
+              {suggestions.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  className="chat-mention-item"
+                  onClick={() => {
+                    const atIdx = input.lastIndexOf("@");
+                    setInput(input.slice(0, atIdx) + `@${name} `);
+                    setMentionQuery(null);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  @{name}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
         {showEmoji && (
           <div className="chat-emoji-popover">
             <EmojiPicker
@@ -334,7 +490,18 @@ export function ChatPanel({
             ref={inputRef}
             placeholder={connected ? `Escreva em #${CHANNEL_NAME}…` : "Conectando..."}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+            const val = e.target.value;
+            setInput(val);
+            notifyTyping();
+            const atIdx = val.lastIndexOf("@");
+            if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === " ")) {
+              const query = val.slice(atIdx + 1).split(" ")[0];
+              setMentionQuery(query);
+            } else {
+              setMentionQuery(null);
+            }
+          }}
             maxLength={2000}
             disabled={!connected}
             autoComplete="off"
@@ -372,12 +539,18 @@ interface MessageProps {
   canDelete: boolean;
   isEditing: boolean;
   editDraft: string;
+  currentUserId: string;
+  currentUsername: string;
+  token: string;
   onStartEdit: () => void;
   onCancelEdit: () => void;
   onCommitEdit: () => void;
   onChangeEdit: (v: string) => void;
   onDelete: () => void;
+  onReact: (emoji: string) => void;
 }
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
 function Message({
   msg,
@@ -387,16 +560,23 @@ function Message({
   canDelete,
   isEditing,
   editDraft,
+  currentUserId,
+  currentUsername,
+  token,
   onStartEdit,
   onCancelEdit,
   onCommitEdit,
   onChangeEdit,
   onDelete,
+  onReact,
 }: MessageProps) {
+  const [showReactPicker, setShowReactPicker] = useState(false);
   const isInvite = msg.content.startsWith("lobby://join/");
   const inviteCode = isInvite ? msg.content.replace("lobby://join/", "").trim() : null;
   const media = !isInvite && !isEditing ? extractMedia(msg.content) : null;
   const contentIsOnlyUrl = media && msg.content.trim() === media.url;
+  const urlMatches = !isInvite && !isEditing && !media ? msg.content.match(URL_RE) : null;
+  const plainUrl = urlMatches ? urlMatches[0].replace(/[),.;!?]+$/, "") : null;
 
   return (
     <>
@@ -458,43 +638,136 @@ function Message({
             <>
               {!contentIsOnlyUrl && (
                 <p className="chat-msg-content">
-                  {msg.content}
+                  {renderWithMentions(msg.content, currentUsername)}
                   {msg.editedAt && <span className="chat-msg-edited"> (editado)</span>}
                 </p>
               )}
               {media && <MediaEmbed url={media.url} />}
+              {plainUrl && <LinkPreview url={plainUrl} token={token} />}
               {contentIsOnlyUrl && msg.editedAt && (
                 <span className="chat-msg-edited">(editado)</span>
               )}
             </>
           )}
         </div>
-        {!isEditing && (canEdit || canDelete) && (
+        {!isEditing && (
           <div className="chat-msg-actions">
-            {canEdit && (
+            <div className="chat-msg-react-wrap">
               <button
                 type="button"
                 className="chat-msg-action-btn"
-                title="Editar"
-                onClick={onStartEdit}
+                title="Reagir"
+                onClick={() => setShowReactPicker((v) => !v)}
               >
+                😊
+              </button>
+              {showReactPicker && (
+                <div className="chat-msg-react-picker">
+                  {QUICK_REACTIONS.map((e) => (
+                    <button
+                      key={e}
+                      type="button"
+                      onClick={() => { onReact(e); setShowReactPicker(false); }}
+                    >
+                      {e}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {canEdit && (
+              <button type="button" className="chat-msg-action-btn" title="Editar" onClick={onStartEdit}>
                 <Ico.edit />
               </button>
             )}
             {canDelete && (
-              <button
-                type="button"
-                className="chat-msg-action-btn danger"
-                title="Apagar"
-                onClick={onDelete}
-              >
+              <button type="button" className="chat-msg-action-btn danger" title="Apagar" onClick={onDelete}>
                 <Ico.trash />
               </button>
             )}
           </div>
         )}
+        {msg.reactions.length > 0 && (
+          <div className="chat-msg-reactions">
+            {msg.reactions.map((r) => (
+              <button
+                key={r.emoji}
+                type="button"
+                className={`chat-reaction${r.userIds.includes(currentUserId) ? " active" : ""}`}
+                title={`${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                onClick={() => onReact(r.emoji)}
+              >
+                {r.emoji} <span>{r.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+function renderWithMentions(content: string, currentUsername: string) {
+  const parts = content.split(/(@\w+)/g);
+  return parts.map((part, i) => {
+    if (/^@\w+$/.test(part)) {
+      const isSelf = part.slice(1).toLowerCase() === currentUsername.toLowerCase();
+      return (
+        <span key={i} className={`chat-mention${isSelf ? " self" : ""}`}>
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
+function TypingBar({ typers }: { typers: Record<string, string> }) {
+  const names = Object.values(typers);
+  if (names.length === 0) return <div className="chat-typing-bar" />;
+  const label =
+    names.length === 1
+      ? `${names[0]} está digitando...`
+      : names.length === 2
+      ? `${names[0]} e ${names[1]} estão digitando...`
+      : "Várias pessoas estão digitando...";
+  return (
+    <div className="chat-typing-bar">
+      <span className="chat-typing-dots">
+        <span /><span /><span />
+      </span>
+      <span className="chat-typing-text">{label}</span>
+    </div>
+  );
+}
+
+function LinkPreview({ url, token }: { url: string; token: string }) {
+  const [data, setData] = useState<{ title?: string; description?: string; image?: string; siteName?: string } | null>(null);
+  const [tried, setTried] = useState(false);
+
+  useEffect(() => {
+    if (tried) return;
+    setTried(true);
+    api.unfurl(token, url).then(setData).catch(() => {});
+  }, [url, token, tried]);
+
+  if (!data || (!data.title && !data.image)) {
+    return <a className="chat-msg-link" href={url} target="_blank" rel="noreferrer">{url}</a>;
+  }
+
+  return (
+    <div className="link-preview">
+      {data.image && (
+        <a href={url} target="_blank" rel="noreferrer">
+          <img src={data.image} alt="" className="link-preview-img" loading="lazy" />
+        </a>
+      )}
+      <div className="link-preview-body">
+        {data.siteName && <div className="link-preview-site">{data.siteName}</div>}
+        <a className="link-preview-title" href={url} target="_blank" rel="noreferrer">{data.title}</a>
+        {data.description && <p className="link-preview-desc">{data.description}</p>}
+      </div>
+    </div>
   );
 }
 

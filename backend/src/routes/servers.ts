@@ -186,6 +186,39 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(204).send();
   });
 
+  // Transfer ownership (owner only)
+  fastify.post("/:serverId/transfer", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+    const { userId: newOwnerId } = request.body as { userId?: string };
+
+    if (!newOwnerId) return reply.status(400).send({ error: "userId obrigatório" });
+
+    const server = await prisma.server.findUnique({ where: { id: serverId } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode transferir" });
+    if (newOwnerId === sub) return reply.status(400).send({ error: "Você já é o dono" });
+
+    const targetMember = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: newOwnerId, serverId } },
+    });
+    if (!targetMember) return reply.status(404).send({ error: "Usuário não é membro do servidor" });
+
+    await prisma.$transaction([
+      prisma.server.update({ where: { id: serverId }, data: { ownerId: newOwnerId } }),
+      prisma.serverMember.update({
+        where: { userId_serverId: { userId: newOwnerId, serverId } },
+        data: { role: "owner" },
+      }),
+      prisma.serverMember.update({
+        where: { userId_serverId: { userId: sub, serverId } },
+        data: { role: "member" },
+      }),
+    ]);
+
+    return reply.status(204).send();
+  });
+
   // Leave server (non-owners only)
   fastify.post("/:serverId/leave", async (request, reply) => {
     const { sub } = request.user as { sub: string };
@@ -321,6 +354,40 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
           game: presence?.game ?? null,
         };
       }),
+    });
+  });
+
+  // Search messages in server
+  fastify.get("/:serverId/messages/search", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+    const { q } = request.query as { q?: string };
+
+    if (!q || q.trim().length < 2) return reply.status(400).send({ error: "Query deve ter ao menos 2 caracteres" });
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    const results = await prisma.message.findMany({
+      where: {
+        serverId,
+        content: { contains: q.trim(), mode: "insensitive" },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+      include: { author: { select: { username: true } } },
+    });
+
+    return reply.send({
+      results: results.map((m) => ({
+        id: m.id,
+        content: m.content,
+        createdAt: m.createdAt.toISOString(),
+        authorId: m.authorId,
+        authorName: m.author.username,
+      })),
     });
   });
 

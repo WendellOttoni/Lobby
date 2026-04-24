@@ -2,6 +2,12 @@ import { FastifyPluginAsync } from "fastify";
 import { WebSocket } from "@fastify/websocket";
 import prisma from "../db/client.js";
 
+interface ReactionCount {
+  emoji: string;
+  count: number;
+  userIds: string[];
+}
+
 interface ChatMessage {
   id: string;
   content: string;
@@ -9,6 +15,7 @@ interface ChatMessage {
   editedAt: string | null;
   authorId: string;
   authorName: string;
+  reactions: ReactionCount[];
 }
 
 interface RateBucket {
@@ -41,11 +48,48 @@ function consumeToken(bucket: RateBucket): boolean {
 }
 
 const rooms = new Map<string, Set<Connection>>();
+const typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
-function broadcast(serverId: string, payload: string) {
-  rooms.get(serverId)?.forEach(({ ws }) => {
-    if (ws.readyState === ws.OPEN) ws.send(payload);
+function broadcast(serverId: string, payload: string, excludeUserId?: string) {
+  rooms.get(serverId)?.forEach((conn) => {
+    if (conn.userId === excludeUserId) return;
+    if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(payload);
   });
+}
+
+function broadcastTyping(serverId: string, userId: string, username: string, typing: boolean) {
+  broadcast(
+    serverId,
+    JSON.stringify({ type: "typing", userId, username, typing }),
+    userId
+  );
+}
+
+function stopTyping(serverId: string, userId: string, username: string) {
+  const key = `${serverId}:${userId}`;
+  const existing = typingTimers.get(key);
+  if (existing) { clearTimeout(existing); typingTimers.delete(key); }
+  broadcastTyping(serverId, userId, username, false);
+}
+
+function groupReactions(rows: { emoji: string; userId: string }[]): ReactionCount[] {
+  const map = new Map<string, string[]>();
+  for (const { emoji, userId } of rows) {
+    if (!map.has(emoji)) map.set(emoji, []);
+    map.get(emoji)!.push(userId);
+  }
+  return Array.from(map.entries()).map(([emoji, userIds]) => ({ emoji, count: userIds.length, userIds }));
+}
+
+function touchTyping(serverId: string, userId: string, username: string) {
+  const key = `${serverId}:${userId}`;
+  const existing = typingTimers.get(key);
+  if (!existing) broadcastTyping(serverId, userId, username, true);
+  else clearTimeout(existing);
+  typingTimers.set(key, setTimeout(() => {
+    typingTimers.delete(key);
+    broadcastTyping(serverId, userId, username, false);
+  }, 4000));
 }
 
 const heartbeatTimer = setInterval(() => {
@@ -117,21 +161,23 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         where: { serverId },
         orderBy: { createdAt: "asc" },
         take: 80,
-        include: { author: { select: { username: true } } },
+        include: {
+          author: { select: { username: true } },
+          reactions: { select: { emoji: true, userId: true } },
+        },
       });
       socket.send(
         JSON.stringify({
           type: "history",
-          messages: history.map(
-            (m): ChatMessage => ({
-              id: m.id,
-              content: m.content,
-              createdAt: m.createdAt.toISOString(),
-              editedAt: m.editedAt?.toISOString() ?? null,
-              authorId: m.authorId,
-              authorName: m.author.username,
-            })
-          ),
+          messages: history.map((m): ChatMessage => ({
+            id: m.id,
+            content: m.content,
+            createdAt: m.createdAt.toISOString(),
+            editedAt: m.editedAt?.toISOString() ?? null,
+            authorId: m.authorId,
+            authorName: m.author.username,
+            reactions: groupReactions(m.reactions),
+          })),
         })
       );
 
@@ -143,8 +189,44 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         try {
           const data = JSON.parse(raw.toString());
 
+          if (data.type === "loadMore") {
+            const beforeId = typeof data.before === "string" ? data.before : null;
+            if (!beforeId) return;
+            const anchor = await prisma.message.findUnique({ where: { id: beforeId }, select: { createdAt: true } });
+            if (!anchor) return;
+            const older = await prisma.message.findMany({
+              where: { serverId, createdAt: { lt: anchor.createdAt } },
+              orderBy: { createdAt: "desc" },
+              take: 40,
+              include: {
+                author: { select: { username: true } },
+                reactions: { select: { emoji: true, userId: true } },
+              },
+            });
+            socket.send(JSON.stringify({
+              type: "history",
+              prepend: true,
+              messages: older.reverse().map((m) => ({
+                id: m.id,
+                content: m.content,
+                createdAt: m.createdAt.toISOString(),
+                editedAt: m.editedAt?.toISOString() ?? null,
+                authorId: m.authorId,
+                authorName: m.author.username,
+                reactions: groupReactions(m.reactions),
+              })),
+            }));
+            return;
+          }
+
+          if (data.type === "typing") {
+            touchTyping(serverId, userId, username);
+            return;
+          }
+
           if (data.type === "message") {
             if (!data.content?.trim()) return;
+            stopTyping(serverId, userId, username);
             if (!consumeToken(conn.bucket)) {
               sendError("Você está enviando mensagens muito rápido. Aguarde alguns segundos.");
               return;
@@ -166,8 +248,40 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
                 editedAt: null,
                 authorId: msg.authorId,
                 authorName: msg.author.username,
+                reactions: [],
               })
             );
+            return;
+          }
+
+          if (data.type === "react") {
+            const id = typeof data.id === "string" ? data.id : null;
+            const emoji = typeof data.emoji === "string" ? data.emoji.trim() : "";
+            if (!id || !emoji || emoji.length > 8) return;
+
+            const msg = await prisma.message.findUnique({ where: { id } });
+            if (!msg || msg.serverId !== serverId) return;
+
+            const existing = await prisma.messageReaction.findUnique({
+              where: { messageId_userId_emoji: { messageId: id, userId, emoji } },
+            });
+
+            if (existing) {
+              await prisma.messageReaction.delete({ where: { id: existing.id } });
+            } else {
+              await prisma.messageReaction.create({ data: { messageId: id, userId, emoji } });
+            }
+
+            const allReactions = await prisma.messageReaction.findMany({
+              where: { messageId: id },
+              select: { emoji: true, userId: true },
+            });
+
+            broadcast(serverId, JSON.stringify({
+              type: "reactions",
+              messageId: id,
+              reactions: groupReactions(allReactions),
+            }));
             return;
           }
 
@@ -225,6 +339,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       socket.on("close", () => {
+        stopTyping(serverId, userId, username);
         rooms.get(serverId)?.delete(conn);
         if (rooms.get(serverId)?.size === 0) rooms.delete(serverId);
       });

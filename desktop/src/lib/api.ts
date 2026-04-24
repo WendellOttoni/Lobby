@@ -171,6 +171,25 @@ export const api = {
 
   markServerRead: (token: string, serverId: string) =>
     request<void>(`/servers/${serverId}/read`, { method: "POST", token }),
+
+  transferOwnership: (token: string, serverId: string, userId: string) =>
+    request<void>(`/servers/${serverId}/transfer`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ userId }),
+    }),
+
+  searchMessages: (token: string, serverId: string, q: string) =>
+    request<{ results: Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string }> }>(
+      `/servers/${serverId}/messages/search?q=${encodeURIComponent(q)}`,
+      { token }
+    ),
+
+  unfurl: (token: string, url: string) =>
+    request<{ title?: string; description?: string; image?: string; siteName?: string }>(
+      `/unfurl?url=${encodeURIComponent(url)}`,
+      { token }
+    ),
 };
 
 export { ApiError };
