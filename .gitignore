@@ -47,3 +47,7 @@ livekit/livekit-server*
 livekit/*.exe
 livekit/LICENSE
 livekit/livekit.yaml
+
+# Docs dumps locais
+docs/Lobby/
+docs/Lobby.zip

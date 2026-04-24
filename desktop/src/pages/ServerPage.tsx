@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
@@ -10,6 +10,7 @@ import { LogoMark } from "../components/LogoMark";
 import { Avatar } from "../components/Avatar";
 import { WaveBars } from "../components/WaveBars";
 import { Ico } from "../components/icons";
+import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServerPage() {
   const { serverId } = useParams<{ serverId: string }>();
@@ -29,7 +30,6 @@ export function ServerPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isOwner = server?.ownerId === user?.id;
 
@@ -60,12 +60,9 @@ export function ServerPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Erro"))
       .finally(() => setLoading(false));
-
-    intervalRef.current = setInterval(loadRooms, 10_000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
   }, [token, serverId]);
+
+  useVisiblePolling(loadRooms, 20_000, !!token && !!serverId, { skipFirst: true });
 
   function copy(text: string, label: string) {
     navigator.clipboard.writeText(text);

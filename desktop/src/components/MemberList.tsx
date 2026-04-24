@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api, Member } from "../lib/api";
 import { Avatar } from "./Avatar";
+import { useVisiblePolling } from "../lib/usePolling";
 
 interface Props {
   serverId: string;
@@ -10,23 +11,16 @@ interface Props {
 export function MemberList({ serverId, token }: Props) {
   const [members, setMembers] = useState<Member[] | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function tick() {
+  useVisiblePolling(
+    async () => {
       const { members: list } = await api
         .listMembers(token, serverId)
         .catch(() => ({ members: [] as Member[] }));
-      if (!cancelled) setMembers(list);
-    }
-
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, [serverId, token]);
+      setMembers(list);
+    },
+    60_000,
+    !!token && !!serverId
+  );
 
   if (members === null) {
     return (

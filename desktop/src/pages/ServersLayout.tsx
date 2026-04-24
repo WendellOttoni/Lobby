@@ -7,6 +7,7 @@ import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
 import { SettingsModal } from "../components/SettingsModal";
+import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServersLayout() {
   const { token, user, logout } = useAuth();
@@ -24,27 +25,20 @@ export function ServersLayout() {
     try {
       const { servers } = await api.listServers(token);
       setServers(servers);
+      if (!loaded) {
+        setLoaded(true);
+        if (!serverId && servers.length > 0) {
+          navigate(`/servers/${servers[0].id}`, { replace: true });
+        }
+      }
       return servers;
     } catch {
       return [];
     }
   }
 
-  useEffect(() => {
-    loadServers().then((list) => {
-      setLoaded(true);
-      if (!serverId && list && list.length > 0) {
-        navigate(`/servers/${list[0].id}`, { replace: true });
-      }
-    });
-  }, [token]);
-
-  // Poll for unread counts every 20s
-  useEffect(() => {
-    if (!token) return;
-    const id = setInterval(loadServers, 20_000);
-    return () => clearInterval(id);
-  }, [token]);
+  // Poll para unread counts — pausa quando a janela fica oculta
+  useVisiblePolling(loadServers, 30_000, !!token);
 
   // Mark active server as read
   useEffect(() => {

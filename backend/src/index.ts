@@ -9,14 +9,21 @@ import serversRoutes from "./routes/servers.js";
 import chatRoutes from "./routes/chat.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
+import { validateEnv } from "./env.js";
+
+validateEnv();
+
+const isDev = process.env.NODE_ENV !== "production";
 
 const fastify = Fastify({
-  logger: {
-    transport: {
-      target: "pino-pretty",
-      options: { colorize: true },
-    },
-  },
+  logger: isDev
+    ? {
+        transport: {
+          target: "pino-pretty",
+          options: { colorize: true },
+        },
+      }
+    : { level: "info" },
 });
 
 const extraOrigins = process.env.CORS_ORIGINS?.split(",").map((o) => o.trim()) ?? [];

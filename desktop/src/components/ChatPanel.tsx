@@ -66,6 +66,15 @@ export function ChatPanel({
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleMarkRead() {
+    if (markReadTimer.current) return;
+    markReadTimer.current = setTimeout(() => {
+      markReadTimer.current = null;
+      api.markServerRead(token, serverId).catch(() => {});
+    }, 1500);
+  }
 
   useEffect(() => {
     setMessages([]);
@@ -111,7 +120,7 @@ export function ChatPanel({
         } else if (data.type === "message") {
           setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
           if (data.authorId !== currentUserId) {
-            api.markServerRead(token, serverId).catch(() => {});
+            scheduleMarkRead();
           }
         }
       };
@@ -122,6 +131,10 @@ export function ChatPanel({
     return () => {
       cancelled = true;
       if (retryTimer) clearTimeout(retryTimer);
+      if (markReadTimer.current) {
+        clearTimeout(markReadTimer.current);
+        markReadTimer.current = null;
+      }
       wsRef.current?.close();
     };
   }, [serverId, token, currentUserId]);

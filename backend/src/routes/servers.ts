@@ -1,17 +1,31 @@
 import { FastifyPluginAsync } from "fastify";
 import { AccessToken } from "livekit-server-sdk";
+import { randomBytes } from "node:crypto";
 import prisma from "../db/client.js";
 import { getRoomService } from "../services/livekit.js";
 import { isOnline, getPresence } from "../services/presence.js";
 
+const CODE_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+
 function generateCode(len = 8) {
-  const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = randomBytes(len);
   let code = "";
   for (let i = 0; i < len; i++) {
-    code += chars[Math.floor(Math.random() * chars.length)];
+    code += CODE_CHARS[bytes[i] % CODE_CHARS.length];
   }
   return code;
 }
+
+async function uniqueInviteCode(): Promise<string> {
+  for (let i = 0; i < 5; i++) {
+    const code = generateCode();
+    const exists = await prisma.server.findUnique({ where: { inviteCode: code }, select: { id: true } });
+    if (!exists) return code;
+  }
+  return generateCode(12);
+}
+
+const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 
 const serversRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("preHandler", fastify.authenticate);
@@ -36,23 +50,28 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       orderBy: { joinedAt: "asc" },
     });
 
-    const unreadCounts = await Promise.all(
-      memberships.map((m) =>
-        prisma.message.count({
-          where: {
-            serverId: m.serverId,
-            createdAt: { gt: m.lastReadAt },
-            authorId: { not: sub },
-          },
-        })
-      )
-    );
+    const counts =
+      memberships.length === 0
+        ? []
+        : await prisma.message.groupBy({
+            by: ["serverId"],
+            where: {
+              authorId: { not: sub },
+              OR: memberships.map((m) => ({
+                serverId: m.serverId,
+                createdAt: { gt: m.lastReadAt },
+              })),
+            },
+            _count: { _all: true },
+          });
+
+    const unreadByServer = new Map(counts.map((c) => [c.serverId, c._count._all]));
 
     return reply.send({
-      servers: memberships.map((m, i) => ({
+      servers: memberships.map((m) => ({
         ...m.server,
         role: m.role,
-        unreadCount: unreadCounts[i],
+        unreadCount: unreadByServer.get(m.serverId) ?? 0,
       })),
     });
   });
@@ -72,6 +91,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Create server
   fastify.post("/", {
+    config: mutateLimit,
     schema: {
       body: {
         type: "object",
@@ -86,7 +106,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       const server = await prisma.server.create({
         data: {
           name,
-          inviteCode: generateCode(),
+          inviteCode: await uniqueInviteCode(),
           ownerId: sub,
           members: { create: { userId: sub, role: "owner" } },
         },
@@ -115,7 +135,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Join server via invite code
-  fastify.post("/invite/:code/join", async (request, reply) => {
+  fastify.post("/invite/:code/join", { config: mutateLimit }, async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { code } = request.params as { code: string };
 
@@ -183,7 +203,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Regenerate invite code (owner only)
-  fastify.post("/:serverId/invite/reset", async (request, reply) => {
+  fastify.post("/:serverId/invite/reset", { config: mutateLimit }, async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId } = request.params as { serverId: string };
 
@@ -193,7 +213,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
     const updated = await prisma.server.update({
       where: { id: serverId },
-      data: { inviteCode: generateCode() },
+      data: { inviteCode: await uniqueInviteCode() },
       select: { inviteCode: true },
     });
 
@@ -230,6 +250,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
   // Create room in server
   fastify.post("/:serverId/rooms", {
+    config: mutateLimit,
     schema: {
       body: {
         type: "object",

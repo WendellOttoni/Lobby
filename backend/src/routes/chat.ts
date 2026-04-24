@@ -20,10 +20,12 @@ interface Connection {
   userId: string;
   username: string;
   bucket: RateBucket;
+  isAlive: boolean;
 }
 
 const RATE_CAPACITY = 5;
 const RATE_REFILL_PER_SEC = 2;
+const HEARTBEAT_INTERVAL_MS = 30_000;
 
 function consumeToken(bucket: RateBucket): boolean {
   const now = Date.now();
@@ -44,6 +46,22 @@ function broadcast(serverId: string, payload: string) {
     if (ws.readyState === ws.OPEN) ws.send(payload);
   });
 }
+
+const heartbeatTimer = setInterval(() => {
+  for (const [serverId, conns] of rooms) {
+    for (const conn of conns) {
+      if (!conn.isAlive) {
+        try { conn.ws.terminate(); } catch {}
+        conns.delete(conn);
+        continue;
+      }
+      conn.isAlive = false;
+      try { conn.ws.ping(); } catch {}
+    }
+    if (conns.size === 0) rooms.delete(serverId);
+  }
+}, HEARTBEAT_INTERVAL_MS);
+heartbeatTimer.unref?.();
 
 const chatRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get(
@@ -85,8 +103,13 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         userId,
         username,
         bucket: { tokens: RATE_CAPACITY, lastRefill: Date.now() },
+        isAlive: true,
       };
       rooms.get(serverId)!.add(conn);
+
+      socket.on("pong", () => {
+        conn.isAlive = true;
+      });
 
       // Send history (last 80 messages, oldest first)
       const history = await prisma.message.findMany({
