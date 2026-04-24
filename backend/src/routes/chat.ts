@@ -6,6 +6,7 @@ interface ChatMessage {
   id: string;
   content: string;
   createdAt: string;
+  editedAt: string | null;
   authorId: string;
   authorName: string;
 }
@@ -126,6 +127,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               id: m.id,
               content: m.content,
               createdAt: m.createdAt.toISOString(),
+              editedAt: m.editedAt?.toISOString() ?? null,
               authorId: m.authorId,
               authorName: m.author.username,
             })
@@ -133,39 +135,92 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         })
       );
 
+      function sendError(message: string) {
+        socket.send(JSON.stringify({ type: "error", message }));
+      }
+
       socket.on("message", async (raw: Buffer) => {
         try {
           const data = JSON.parse(raw.toString());
-          if (data.type !== "message" || !data.content?.trim()) return;
 
-          if (!consumeToken(conn.bucket)) {
-            socket.send(
+          if (data.type === "message") {
+            if (!data.content?.trim()) return;
+            if (!consumeToken(conn.bucket)) {
+              sendError("Você está enviando mensagens muito rápido. Aguarde alguns segundos.");
+              return;
+            }
+
+            const content = String(data.content).trim().slice(0, 2000);
+            const msg = await prisma.message.create({
+              data: { content, authorId: userId, serverId },
+              include: { author: { select: { username: true } } },
+            });
+
+            broadcast(
+              serverId,
               JSON.stringify({
-                type: "error",
-                message: "Você está enviando mensagens muito rápido. Aguarde alguns segundos.",
+                type: "message",
+                id: msg.id,
+                content: msg.content,
+                createdAt: msg.createdAt.toISOString(),
+                editedAt: null,
+                authorId: msg.authorId,
+                authorName: msg.author.username,
               })
             );
             return;
           }
 
-          const content = String(data.content).trim().slice(0, 2000);
+          if (data.type === "edit") {
+            const id = typeof data.id === "string" ? data.id : null;
+            const content = typeof data.content === "string" ? data.content.trim() : "";
+            if (!id || !content) return;
 
-          const msg = await prisma.message.create({
-            data: { content, authorId: userId, serverId },
-            include: { author: { select: { username: true } } },
-          });
+            const existing = await prisma.message.findUnique({ where: { id } });
+            if (!existing || existing.serverId !== serverId) return;
+            if (existing.authorId !== userId) {
+              sendError("Só o autor pode editar a mensagem.");
+              return;
+            }
 
-          broadcast(
-            serverId,
-            JSON.stringify({
-              type: "message",
-              id: msg.id,
-              content: msg.content,
-              createdAt: msg.createdAt.toISOString(),
-              authorId: msg.authorId,
-              authorName: msg.author.username,
-            })
-          );
+            const updated = await prisma.message.update({
+              where: { id },
+              data: { content: content.slice(0, 2000), editedAt: new Date() },
+            });
+
+            broadcast(
+              serverId,
+              JSON.stringify({
+                type: "edit",
+                id: updated.id,
+                content: updated.content,
+                editedAt: updated.editedAt!.toISOString(),
+              })
+            );
+            return;
+          }
+
+          if (data.type === "delete") {
+            const id = typeof data.id === "string" ? data.id : null;
+            if (!id) return;
+
+            const existing = await prisma.message.findUnique({ where: { id } });
+            if (!existing || existing.serverId !== serverId) return;
+
+            const server = await prisma.server.findUnique({
+              where: { id: serverId },
+              select: { ownerId: true },
+            });
+            const canDelete = existing.authorId === userId || server?.ownerId === userId;
+            if (!canDelete) {
+              sendError("Sem permissão para apagar esta mensagem.");
+              return;
+            }
+
+            await prisma.message.delete({ where: { id } });
+            broadcast(serverId, JSON.stringify({ type: "delete", id }));
+            return;
+          }
         } catch {}
       });
 

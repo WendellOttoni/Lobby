@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
 import { api } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
@@ -7,6 +8,7 @@ interface ChatMessage {
   id: string;
   content: string;
   createdAt: string;
+  editedAt?: string | null;
   authorId: string;
   authorName: string;
 }
@@ -15,6 +17,7 @@ interface Props {
   serverId: string;
   token: string;
   currentUserId: string;
+  isOwner: boolean;
   onToggleMembers?: () => void;
   membersVisible?: boolean;
 }
@@ -46,6 +49,21 @@ function sameCalendarDay(a: string, b: string): boolean {
   );
 }
 
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
+const IMG_EXT_RE = /\.(png|jpe?g|gif|webp|avif)(\?[^\s]*)?$/i;
+const MEDIA_HOSTS = /(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|media[0-9]?\.giphy\.com|imgur\.com|i\.imgur\.com)/i;
+
+function extractMedia(content: string): { url: string; isTenorEmbed: boolean } | null {
+  const matches = content.match(URL_RE);
+  if (!matches) return null;
+  for (const raw of matches) {
+    const url = raw.replace(/[),.;!?]+$/, "");
+    if (IMG_EXT_RE.test(url)) return { url, isTenorEmbed: false };
+    if (MEDIA_HOSTS.test(url)) return { url, isTenorEmbed: true };
+  }
+  return null;
+}
+
 function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
   if (!prev || prev.authorId !== curr.authorId) return false;
   if (!sameCalendarDay(prev.createdAt, curr.createdAt)) return false;
@@ -56,6 +74,7 @@ export function ChatPanel({
   serverId,
   token,
   currentUserId,
+  isOwner,
   onToggleMembers,
   membersVisible,
 }: Props) {
@@ -63,10 +82,46 @@ export function ChatPanel({
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
   const [connected, setConnected] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState("");
+  const [showEmoji, setShowEmoji] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function send(payload: object): boolean {
+    const ws = wsRef.current;
+    if (ws?.readyState !== WebSocket.OPEN) return false;
+    ws.send(JSON.stringify(payload));
+    return true;
+  }
+
+  function startEdit(msg: ChatMessage) {
+    setEditingId(msg.id);
+    setEditDraft(msg.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditDraft("");
+  }
+
+  function commitEdit() {
+    if (!editingId) return;
+    const trimmed = editDraft.trim();
+    if (!trimmed) return;
+    const original = messages.find((m) => m.id === editingId);
+    if (original && trimmed !== original.content) {
+      send({ type: "edit", id: editingId, content: trimmed });
+    }
+    cancelEdit();
+  }
+
+  function deleteMessage(id: string) {
+    if (!window.confirm("Apagar esta mensagem?")) return;
+    send({ type: "delete", id });
+  }
 
   function scheduleMarkRead() {
     if (markReadTimer.current) return;
@@ -122,6 +177,15 @@ export function ChatPanel({
           if (data.authorId !== currentUserId) {
             scheduleMarkRead();
           }
+        } else if (data.type === "edit") {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m
+            )
+          );
+        } else if (data.type === "delete") {
+          setMessages((prev) => prev.filter((m) => m.id !== data.id));
+          setEditingId((id) => (id === data.id ? null : id));
         }
       };
     }
@@ -143,13 +207,14 @@ export function ChatPanel({
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, [messages]);
 
-  function send(e: FormEvent) {
+  function sendForm(e: FormEvent) {
     e.preventDefault();
     const trimmed = input.trim();
-    if (!trimmed || wsRef.current?.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "message", content: trimmed }));
-    setInput("");
-    inputRef.current?.focus();
+    if (!trimmed) return;
+    if (send({ type: "message", content: trimmed })) {
+      setInput("");
+      inputRef.current?.focus();
+    }
   }
 
   const hasContent = input.trim().length > 0;
@@ -220,12 +285,22 @@ export function ChatPanel({
           const prev = messages[i - 1];
           const grouped = shouldGroup(prev, msg);
           const showDate = i === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
+          const isAuthor = msg.authorId === currentUserId;
           return (
             <Message
               key={msg.id}
               msg={msg}
               grouped={grouped}
               showDate={showDate}
+              canEdit={isAuthor}
+              canDelete={isAuthor || isOwner}
+              isEditing={editingId === msg.id}
+              editDraft={editDraft}
+              onStartEdit={() => startEdit(msg)}
+              onCancelEdit={cancelEdit}
+              onCommitEdit={commitEdit}
+              onChangeEdit={setEditDraft}
+              onDelete={() => deleteMessage(msg.id)}
             />
           );
         })}
@@ -233,7 +308,25 @@ export function ChatPanel({
       </div>
 
       <div className="chat-input-wrap">
-        <form className="chat-input-shell" onSubmit={send}>
+        {showEmoji && (
+          <div className="chat-emoji-popover">
+            <EmojiPicker
+              theme={Theme.DARK}
+              emojiStyle={EmojiStyle.NATIVE}
+              lazyLoadEmojis
+              skinTonesDisabled
+              searchPlaceholder="Buscar emoji..."
+              width="100%"
+              height={340}
+              onEmojiClick={(data) => {
+                setInput((v) => v + data.emoji);
+                setShowEmoji(false);
+                inputRef.current?.focus();
+              }}
+            />
+          </div>
+        )}
+        <form className="chat-input-shell" onSubmit={sendForm}>
           <button type="button" className="chat-input-btn" title="Anexar">
             <Ico.attach />
           </button>
@@ -246,7 +339,12 @@ export function ChatPanel({
             disabled={!connected}
             autoComplete="off"
           />
-          <button type="button" className="chat-input-btn" title="Emoji">
+          <button
+            type="button"
+            className={`chat-input-btn${showEmoji ? " active" : ""}`}
+            title="Emoji"
+            onClick={() => setShowEmoji((v) => !v)}
+          >
             <Ico.emoji />
           </button>
           <button
@@ -266,17 +364,39 @@ export function ChatPanel({
   );
 }
 
+interface MessageProps {
+  msg: ChatMessage;
+  grouped: boolean;
+  showDate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+  isEditing: boolean;
+  editDraft: string;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onCommitEdit: () => void;
+  onChangeEdit: (v: string) => void;
+  onDelete: () => void;
+}
+
 function Message({
   msg,
   grouped,
   showDate,
-}: {
-  msg: ChatMessage;
-  grouped: boolean;
-  showDate: boolean;
-}) {
+  canEdit,
+  canDelete,
+  isEditing,
+  editDraft,
+  onStartEdit,
+  onCancelEdit,
+  onCommitEdit,
+  onChangeEdit,
+  onDelete,
+}: MessageProps) {
   const isInvite = msg.content.startsWith("lobby://join/");
   const inviteCode = isInvite ? msg.content.replace("lobby://join/", "").trim() : null;
+  const media = !isInvite && !isEditing ? extractMedia(msg.content) : null;
+  const contentIsOnlyUrl = media && msg.content.trim() === media.url;
 
   return (
     <>
@@ -302,14 +422,95 @@ function Message({
               <span className="chat-msg-time">{formatTime(msg.createdAt)}</span>
             </div>
           )}
-          {isInvite && inviteCode ? (
+          {isEditing ? (
+            <div className="chat-msg-edit">
+              <textarea
+                value={editDraft}
+                onChange={(e) => onChangeEdit(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onCancelEdit();
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    onCommitEdit();
+                  }
+                }}
+                maxLength={2000}
+                autoFocus
+                rows={Math.min(6, Math.max(1, editDraft.split("\n").length))}
+              />
+              <div className="chat-msg-edit-hint">
+                <button type="button" className="btn-secondary" onClick={onCancelEdit}>
+                  Cancelar
+                </button>
+                <button type="button" onClick={onCommitEdit} disabled={!editDraft.trim()}>
+                  Salvar
+                </button>
+                <span>
+                  <strong>esc</strong> cancelar · <strong>enter</strong> salvar
+                </span>
+              </div>
+            </div>
+          ) : isInvite && inviteCode ? (
             <InviteEmbed code={inviteCode} />
           ) : (
-            <p className="chat-msg-content">{msg.content}</p>
+            <>
+              {!contentIsOnlyUrl && (
+                <p className="chat-msg-content">
+                  {msg.content}
+                  {msg.editedAt && <span className="chat-msg-edited"> (editado)</span>}
+                </p>
+              )}
+              {media && <MediaEmbed url={media.url} />}
+              {contentIsOnlyUrl && msg.editedAt && (
+                <span className="chat-msg-edited">(editado)</span>
+              )}
+            </>
           )}
         </div>
+        {!isEditing && (canEdit || canDelete) && (
+          <div className="chat-msg-actions">
+            {canEdit && (
+              <button
+                type="button"
+                className="chat-msg-action-btn"
+                title="Editar"
+                onClick={onStartEdit}
+              >
+                <Ico.edit />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                className="chat-msg-action-btn danger"
+                title="Apagar"
+                onClick={onDelete}
+              >
+                <Ico.trash />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </>
+  );
+}
+
+function MediaEmbed({ url }: { url: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return (
+      <a className="chat-msg-link" href={url} target="_blank" rel="noreferrer">
+        {url}
+      </a>
+    );
+  }
+  return (
+    <a className="chat-media" href={url} target="_blank" rel="noreferrer">
+      <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
+    </a>
   );
 }
 

@@ -69,9 +69,10 @@ model RoomMember {
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  content   String   @db.VarChar(2000)
-  createdAt DateTime @default(now())
+  id        String    @id @default(cuid())
+  content   String    @db.VarChar(2000)
+  createdAt DateTime  @default(now())
+  editedAt  DateTime?
   authorId  String
   serverId  String
 

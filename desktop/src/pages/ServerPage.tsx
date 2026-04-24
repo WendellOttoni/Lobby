@@ -10,6 +10,7 @@ import { LogoMark } from "../components/LogoMark";
 import { Avatar } from "../components/Avatar";
 import { WaveBars } from "../components/WaveBars";
 import { Ico } from "../components/icons";
+import { ParticipantContextMenu } from "../components/ParticipantContextMenu";
 import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServerPage() {
@@ -30,6 +31,12 @@ export function ServerPage() {
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
+  const [ctxMenu, setCtxMenu] = useState<{
+    identity: string;
+    name: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   const isOwner = server?.ownerId === user?.id;
 
@@ -368,6 +375,13 @@ export function ServerPage() {
                         <div
                           key={p.identity}
                           className={`channel-row-voice-member${p.isSpeaking ? " speaking" : ""}`}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (p.isLocal) return;
+                            setCtxMenu({ identity: p.identity, name: p.name, x: e.clientX, y: e.clientY });
+                          }}
+                          title={p.isLocal ? "Você" : "Clique direito para ajustar volume/apelido"}
                         >
                           <Avatar
                             name={p.name}
@@ -401,6 +415,7 @@ export function ServerPage() {
           serverId={serverId}
           token={token}
           currentUserId={user.id}
+          isOwner={isOwner}
           onToggleMembers={() => setShowMembers((v) => !v)}
           membersVisible={showMembers}
         />
@@ -409,6 +424,18 @@ export function ServerPage() {
       {/* ── Members ── */}
       {showMembers && token && serverId && (
         <MemberList serverId={serverId} token={token} />
+      )}
+
+      {ctxMenu && (
+        <ParticipantContextMenu
+          position={{ x: ctxMenu.x, y: ctxMenu.y }}
+          realName={ctxMenu.name}
+          initialNickname={voice.nicknames[ctxMenu.identity] ?? ""}
+          initialVolume={voice.userVolumes[ctxMenu.identity] ?? 1}
+          onSetNickname={(name) => voice.setNickname(ctxMenu.identity, name)}
+          onSetVolume={(v) => voice.setUserVolume(ctxMenu.identity, v)}
+          onClose={() => setCtxMenu(null)}
+        />
       )}
     </div>
   );
