@@ -20,6 +20,7 @@ model User {
   messages          Message[]
   reactions         MessageReaction[]
   pins              MessagePin[]
+  channelReads      ChannelRead[]
 }
 
 model Server {
@@ -78,10 +79,24 @@ model TextChannel {
   serverId  String
   createdAt DateTime @default(now())
 
-  server   Server    @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  server   Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
   messages Message[]
+  reads    ChannelRead[]
 
   @@index([serverId])
+}
+
+model ChannelRead {
+  id         String   @id @default(cuid())
+  userId     String
+  channelId  String
+  lastReadAt DateTime @default(now())
+
+  user    User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel TextChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@index([channelId])
 }
 
 model MessageReaction {

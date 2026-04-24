@@ -46,7 +46,7 @@ export function SettingsModal({ onClose }: Props) {
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [version, setVersion] = useState<string | null>(null);
 
-  const [recordingPTT, setRecordingPTT] = useState(false);
+  const [recordingKey, setRecordingKey] = useState<"ptt" | "mute" | "deafen" | null>(null);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [notifyJoin, setNotifyJoin] = useState(() => isNotifyJoinEnabled());
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
@@ -137,14 +137,17 @@ export function SettingsModal({ onClose }: Props) {
     }
   }
 
-  function handlePTTKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
-    if (!recordingPTT) return;
-    e.preventDefault();
-    const tauriKey = ALLOWED_PTT_KEYS[e.key];
-    if (tauriKey) {
-      voice.setPttKey(tauriKey);
-      setRecordingPTT(false);
-    }
+  function handleHotkeyDown(target: "ptt" | "mute" | "deafen") {
+    return (e: KeyboardEvent<HTMLButtonElement>) => {
+      if (recordingKey !== target) return;
+      e.preventDefault();
+      const tauriKey = ALLOWED_PTT_KEYS[e.key];
+      if (!tauriKey) return;
+      if (target === "ptt") voice.setPttKey(tauriKey);
+      else if (target === "mute") voice.setMuteKey(tauriKey);
+      else voice.setDeafenKey(tauriKey);
+      setRecordingKey(null);
+    };
   }
 
   const updateLabel: Record<UpdateStatus, string> = {
@@ -154,6 +157,51 @@ export function SettingsModal({ onClose }: Props) {
     downloading: "Baixando e instalando...",
     error: "Erro ao verificar — tente novamente",
   };
+
+  function HotkeyRow({
+    label,
+    hint,
+    value,
+    recording,
+    onKeyDown,
+    onToggle,
+    onClear,
+  }: {
+    label: string;
+    hint: string;
+    value: string | null;
+    recording: boolean;
+    onKeyDown: (e: KeyboardEvent<HTMLButtonElement>) => void;
+    onToggle: () => void;
+    onClear: () => void;
+  }) {
+    return (
+      <div className="settings-hotkey-row">
+        <div className="settings-hotkey-label">
+          <strong>{label}</strong>
+          <span>{hint}</span>
+        </div>
+        <span className="settings-ptt-key">{value ?? "Não configurado"}</span>
+        <button
+          className={recording ? "btn-danger-outline" : "btn-secondary"}
+          onKeyDown={onKeyDown}
+          onClick={onToggle}
+          style={{ fontSize: 13, padding: "6px 12px" }}
+        >
+          {recording ? "Aguardando..." : "Alterar"}
+        </button>
+        {value && !recording && (
+          <button
+            className="btn-secondary"
+            onClick={onClear}
+            style={{ fontSize: 13, padding: "6px 12px" }}
+          >
+            Limpar
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -256,34 +304,36 @@ export function SettingsModal({ onClose }: Props) {
           </section>
 
           <section className="settings-section">
-            <h3>Push-to-talk</h3>
+            <h3>Atalhos globais</h3>
             <div className="settings-ptt">
-              <p className="settings-ptt-desc">
-                Segure a tecla configurada para falar enquanto estiver mutado.
-              </p>
-              <div className="settings-ptt-row">
-                <span className="settings-ptt-key">
-                  {voice.pttKey ?? "Não configurado"}
-                </span>
-                <button
-                  className={recordingPTT ? "btn-danger-outline" : "btn-secondary"}
-                  onKeyDown={handlePTTKeyDown}
-                  onClick={() => setRecordingPTT((r) => !r)}
-                  style={{ fontSize: 13, padding: "6px 12px" }}
-                >
-                  {recordingPTT ? "Aguardando tecla..." : "Alterar"}
-                </button>
-                {voice.pttKey && !recordingPTT && (
-                  <button
-                    className="btn-secondary"
-                    onClick={() => voice.setPttKey(null)}
-                    style={{ fontSize: 13, padding: "6px 12px" }}
-                  >
-                    Limpar
-                  </button>
-                )}
-              </div>
-              {recordingPTT && (
+              <HotkeyRow
+                label="Push-to-talk"
+                hint="Segure a tecla para falar enquanto mutado"
+                value={voice.pttKey}
+                recording={recordingKey === "ptt"}
+                onKeyDown={handleHotkeyDown("ptt")}
+                onToggle={() => setRecordingKey((k) => (k === "ptt" ? null : "ptt"))}
+                onClear={() => voice.setPttKey(null)}
+              />
+              <HotkeyRow
+                label="Toggle mute"
+                hint="Alterna microfone com um toque"
+                value={voice.muteKey}
+                recording={recordingKey === "mute"}
+                onKeyDown={handleHotkeyDown("mute")}
+                onToggle={() => setRecordingKey((k) => (k === "mute" ? null : "mute"))}
+                onClear={() => voice.setMuteKey(null)}
+              />
+              <HotkeyRow
+                label="Toggle deafen"
+                hint="Silencia você e os outros"
+                value={voice.deafenKey}
+                recording={recordingKey === "deafen"}
+                onKeyDown={handleHotkeyDown("deafen")}
+                onToggle={() => setRecordingKey((k) => (k === "deafen" ? null : "deafen"))}
+                onClear={() => voice.setDeafenKey(null)}
+              />
+              {recordingKey && (
                 <p style={{ fontSize: 12, opacity: 0.6, marginTop: 6 }}>
                   Teclas suportadas: F1–F12, CapsLock, ScrollLock, Pause, Insert, Home, End, PageUp, PageDown
                 </p>

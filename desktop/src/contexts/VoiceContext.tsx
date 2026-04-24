@@ -35,6 +35,7 @@ interface VoiceContextValue {
   connectionState: ConnectionState;
   participants: VoiceParticipant[];
   isMuted: boolean;
+  isDeafened: boolean;
   isPTTActive: boolean;
   isReconnecting: boolean;
   volume: number;
@@ -45,14 +46,19 @@ interface VoiceContextValue {
   nicknames: Record<string, string>;
   userVolumes: Record<string, number>;
   pttKey: string | null;
+  muteKey: string | null;
+  deafenKey: string | null;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
+  toggleDeafen: () => Promise<void>;
   changeDevice: (deviceId: string) => Promise<void>;
   setVolumeAll: (v: number) => void;
   setNickname: (identity: string, name: string) => void;
   setUserVolume: (identity: string, v: number) => void;
   setPttKey: (key: string | null) => void;
+  setMuteKey: (key: string | null) => void;
+  setDeafenKey: (key: string | null) => void;
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -61,6 +67,8 @@ const VOLUME_KEY = "lobby_volume";
 const NICKNAMES_KEY = "lobby_nicknames";
 const USER_VOLUMES_KEY = "lobby_user_volumes";
 const PTT_KEY_STORAGE = "lobby_ptt_key";
+const MUTE_KEY_STORAGE = "lobby_mute_key";
+const DEAFEN_KEY_STORAGE = "lobby_deafen_key";
 
 const RECONNECT_DELAYS = [2000, 5000, 10000, 20000, 30000];
 
@@ -120,6 +128,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [connectionState, setConnectionState] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [participants, setParticipants] = useState<VoiceParticipant[]>([]);
   const [isMuted, setIsMuted] = useState(false);
+  const [isDeafened, setIsDeafened] = useState(false);
+  const isDeafenedRef = useRef(false);
   const [isPTTActive, setIsPTTActive] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [volume, setVolumeState] = useState<number>(loadInitialVolume);
@@ -129,6 +139,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [pttKey, setPttKeyState] = useState<string | null>(() =>
     localStorage.getItem(PTT_KEY_STORAGE)
+  );
+  const [muteKey, setMuteKeyState] = useState<string | null>(() =>
+    localStorage.getItem(MUTE_KEY_STORAGE)
+  );
+  const [deafenKey, setDeafenKeyState] = useState<string | null>(() =>
+    localStorage.getItem(DEAFEN_KEY_STORAGE)
   );
 
   const [nicknames, setNicknamesState] = useState<Record<string, string>>(() =>
@@ -173,7 +189,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
   function applyVolumeTo(p: RemoteParticipant) {
     const mult = userVolumesRef.current[p.identity] ?? 1;
-    p.setVolume(volumeRef.current * mult);
+    const base = isDeafenedRef.current ? 0 : volumeRef.current;
+    p.setVolume(base * mult);
   }
 
   function snapshotRoom(room: Room) {
@@ -361,6 +378,50 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setIsMuted(!nextEnabled);
   }
 
+  async function toggleDeafen() {
+    const room = roomRef.current;
+    if (!room) return;
+    const next = !isDeafenedRef.current;
+    isDeafenedRef.current = next;
+    setIsDeafened(next);
+    room.remoteParticipants.forEach(applyVolumeTo);
+    if (next && !isMuted) {
+      await room.localParticipant.setMicrophoneEnabled(false);
+      userWantsMutedRef.current = true;
+      setIsMuted(true);
+    }
+  }
+
+  useEffect(() => {
+    if (!muteKey) return;
+    let active = true;
+    register(muteKey, (event) => {
+      if (!active) return;
+      if (event.state !== "Pressed") return;
+      if (!roomRef.current) return;
+      toggleMute();
+    }).catch((e) => console.warn("[mute-key] register failed:", e));
+    return () => {
+      active = false;
+      unregister(muteKey).catch(() => {});
+    };
+  }, [muteKey, isMuted]);
+
+  useEffect(() => {
+    if (!deafenKey) return;
+    let active = true;
+    register(deafenKey, (event) => {
+      if (!active) return;
+      if (event.state !== "Pressed") return;
+      if (!roomRef.current) return;
+      toggleDeafen();
+    }).catch((e) => console.warn("[deafen-key] register failed:", e));
+    return () => {
+      active = false;
+      unregister(deafenKey).catch(() => {});
+    };
+  }, [deafenKey]);
+
   async function changeDevice(deviceId: string) {
     const room = roomRef.current;
     if (!room) return;
@@ -409,14 +470,26 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setPttKeyState(key);
   }
 
+  function setMuteKey(key: string | null) {
+    if (key) localStorage.setItem(MUTE_KEY_STORAGE, key);
+    else localStorage.removeItem(MUTE_KEY_STORAGE);
+    setMuteKeyState(key);
+  }
+
+  function setDeafenKey(key: string | null) {
+    if (key) localStorage.setItem(DEAFEN_KEY_STORAGE, key);
+    else localStorage.removeItem(DEAFEN_KEY_STORAGE);
+    setDeafenKeyState(key);
+  }
+
   return (
     <VoiceContext.Provider value={{
       activeServerId, activeRoomId, activeRoomName,
-      connectionState, participants, isMuted, isPTTActive, isReconnecting,
+      connectionState, participants, isMuted, isDeafened, isPTTActive, isReconnecting,
       volume, audioDevices, selectedDevice, localMicTrack, error,
-      nicknames, userVolumes, pttKey,
-      connect, disconnect, toggleMute, changeDevice, setVolumeAll,
-      setNickname, setUserVolume, setPttKey,
+      nicknames, userVolumes, pttKey, muteKey, deafenKey,
+      connect, disconnect, toggleMute, toggleDeafen, changeDevice, setVolumeAll,
+      setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
     }}>
       {children}
     </VoiceContext.Provider>

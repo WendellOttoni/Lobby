@@ -1,5 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
+import { Highlight, themes } from "prism-react-renderer";
 import { api } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
 import { Avatar } from "./Avatar";
@@ -40,6 +41,7 @@ interface Props {
   channelName: string;
   onToggleMembers?: () => void;
   onOpenPins?: () => void;
+  onChannelMessage?: (channelId: string | null, authorId: string) => void;
   membersVisible?: boolean;
 }
 
@@ -91,7 +93,28 @@ function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean 
   return new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
 }
 
-const FORMAT_RE = /```([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
+const FORMAT_RE = /```(?:(\w+)\n)?([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
+
+function CodeBlock({ lang, code }: { lang: string | undefined; code: string }) {
+  return (
+    <Highlight theme={themes.vsDark} code={code.replace(/\n$/, "")} language={lang ?? "text"}>
+      {({ className, style, tokens, getLineProps, getTokenProps }) => (
+        <pre className={`chat-msg-codeblock ${className}`} style={style}>
+          {lang && <span className="chat-msg-codeblock-lang">{lang}</span>}
+          <code>
+            {tokens.map((line, i) => (
+              <div key={i} {...getLineProps({ line })}>
+                {line.map((token, j) => (
+                  <span key={j} {...getTokenProps({ token })} />
+                ))}
+              </div>
+            ))}
+          </code>
+        </pre>
+      )}
+    </Highlight>
+  );
+}
 
 function formatMessage(text: string, currentUsername: string): ReactNode[] {
   const nodes: ReactNode[] = [];
@@ -101,19 +124,19 @@ function formatMessage(text: string, currentUsername: string): ReactNode[] {
   FORMAT_RE.lastIndex = 0;
   while ((m = FORMAT_RE.exec(text)) !== null) {
     if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
-    if (m[1] !== undefined) {
-      nodes.push(<pre key={key++} className="chat-msg-codeblock"><code>{m[1]}</code></pre>);
-    } else if (m[2] !== undefined) {
-      nodes.push(<code key={key++} className="chat-msg-code">{m[2]}</code>);
+    if (m[2] !== undefined) {
+      nodes.push(<CodeBlock key={key++} lang={m[1]} code={m[2]} />);
     } else if (m[3] !== undefined) {
-      nodes.push(<strong key={key++}>{m[3]}</strong>);
+      nodes.push(<code key={key++} className="chat-msg-code">{m[3]}</code>);
     } else if (m[4] !== undefined) {
-      nodes.push(<em key={key++}>{m[4]}</em>);
+      nodes.push(<strong key={key++}>{m[4]}</strong>);
     } else if (m[5] !== undefined) {
-      const isSelf = m[5].slice(1).toLowerCase() === currentUsername.toLowerCase();
+      nodes.push(<em key={key++}>{m[5]}</em>);
+    } else if (m[6] !== undefined) {
+      const isSelf = m[6].slice(1).toLowerCase() === currentUsername.toLowerCase();
       nodes.push(
         <span key={key++} className={`chat-mention${isSelf ? " self" : ""}`}>
-          {m[5]}
+          {m[6]}
         </span>
       );
     }
@@ -133,8 +156,11 @@ export function ChatPanel({
   channelName,
   onToggleMembers,
   onOpenPins,
+  onChannelMessage,
   membersVisible,
 }: Props) {
+  const onChannelMessageRef = useRef(onChannelMessage);
+  useEffect(() => { onChannelMessageRef.current = onChannelMessage; }, [onChannelMessage]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
@@ -157,7 +183,16 @@ export function ChatPanel({
   const scrollRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  function autoResize() {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 160) + "px";
+  }
+
+  useEffect(() => { autoResize(); }, [input]);
   const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function send(payload: object): boolean {
@@ -208,7 +243,11 @@ export function ChatPanel({
     if (markReadTimer.current) return;
     markReadTimer.current = setTimeout(() => {
       markReadTimer.current = null;
-      api.markServerRead(token, serverId).catch(() => {});
+      if (channelId === null) {
+        api.markServerRead(token, serverId).catch(() => {});
+      } else {
+        api.markChannelRead(token, serverId, channelId).catch(() => {});
+      }
     }, 1500);
   }
 
@@ -281,10 +320,13 @@ export function ChatPanel({
         } else if (data.type === "message") {
           const msg = data as ChatMessage & { type: string };
           setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
-          if (msg.authorId !== currentUserId && msg.channelId === channelId) {
-            scheduleMarkRead();
-            const mentioned = msg.content.includes(`@${currentUsername}`);
-            if (document.hidden || mentioned) playMessageSound();
+          if (msg.authorId !== currentUserId) {
+            onChannelMessageRef.current?.(msg.channelId, msg.authorId);
+            if (msg.channelId === channelId) {
+              scheduleMarkRead();
+              const mentioned = msg.content.includes(`@${currentUsername}`);
+              if (document.hidden || mentioned) playMessageSound();
+            }
           }
         } else if (data.type === "edit") {
           setMessages((prev) =>
@@ -590,22 +632,37 @@ export function ChatPanel({
           <button type="button" className="chat-input-btn" title="Anexar">
             <Ico.attach />
           </button>
-          <input
+          <textarea
             ref={inputRef}
+            className="chat-input-textarea"
             placeholder={connected ? `Escreva em #${channelName}…` : "Conectando..."}
             value={input}
+            rows={1}
             onChange={(e) => {
-            const val = e.target.value;
-            setInput(val);
-            notifyTyping();
-            const atIdx = val.lastIndexOf("@");
-            if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === " ")) {
-              const query = val.slice(atIdx + 1).split(" ")[0];
-              setMentionQuery(query);
-            } else {
-              setMentionQuery(null);
-            }
-          }}
+              const val = e.target.value;
+              setInput(val);
+              notifyTyping();
+              const atIdx = val.lastIndexOf("@");
+              if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === " ")) {
+                const query = val.slice(atIdx + 1).split(" ")[0];
+                setMentionQuery(query);
+              } else {
+                setMentionQuery(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                const trimmed = input.trim();
+                if (!trimmed) return;
+                const payload: Record<string, unknown> = { type: "message", content: trimmed, channelId };
+                if (replyTo) payload.replyToId = replyTo.id;
+                if (send(payload)) {
+                  setInput("");
+                  setReplyTo(null);
+                }
+              }
+            }}
             maxLength={2000}
             disabled={!connected}
             autoComplete="off"

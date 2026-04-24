@@ -23,6 +23,7 @@ export function ServerPage() {
   const [server, setServer] = useState<Server | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [channels, setChannels] = useState<TextChannel[]>([]);
+  const [generalUnread, setGeneralUnread] = useState(0);
   const [currentChannelId, setCurrentChannelId] = useState<string | null>(null);
   const [showPins, setShowPins] = useState(false);
   const [newChannelName, setNewChannelName] = useState("");
@@ -68,10 +69,11 @@ export function ServerPage() {
       api.listRooms(token, serverId),
       api.listChannels(token, serverId),
     ])
-      .then(([{ server }, { rooms }, { channels }]) => {
+      .then(([{ server }, { rooms }, { channels, generalUnread }]) => {
         setServer(server);
         setRooms(rooms);
         setChannels(channels);
+        setGeneralUnread(generalUnread);
         setInviteCode(server.inviteCode);
         setError(null);
       })
@@ -85,6 +87,31 @@ export function ServerPage() {
     navigator.clipboard.writeText(text);
     setCopiedMsg(label);
     setTimeout(() => setCopiedMsg(null), 2000);
+  }
+
+  function switchChannel(id: string | null) {
+    if (id === currentChannelId) return;
+    setCurrentChannelId(id);
+    if (!token || !serverId) return;
+    if (id === null) {
+      setGeneralUnread(0);
+      api.markServerRead(token, serverId).catch(() => {});
+    } else {
+      setChannels((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
+      api.markChannelRead(token, serverId, id).catch(() => {});
+    }
+  }
+
+  function onChannelMessage(channelId: string | null, authorId: string) {
+    if (authorId === user?.id) return;
+    if (channelId === currentChannelId) return;
+    if (channelId === null) {
+      setGeneralUnread((n) => n + 1);
+    } else {
+      setChannels((prev) =>
+        prev.map((c) => (c.id === channelId ? { ...c, unreadCount: (c.unreadCount ?? 0) + 1 } : c))
+      );
+    }
   }
 
   async function onCreateChannel(e: FormEvent) {
@@ -368,37 +395,47 @@ export function ServerPage() {
 
           {showGeneralChannel && (
             <button
-              className={`channel-row${currentChannelId === null ? " active" : ""}`}
-              onClick={() => setCurrentChannelId(null)}
+              className={`channel-row${currentChannelId === null ? " active" : ""}${generalUnread > 0 && currentChannelId !== null ? " unread" : ""}`}
+              onClick={() => switchChannel(null)}
             >
               <div className="channel-row-head">
                 <span className="channel-row-icon"><Ico.hash /></span>
                 <span className="channel-row-name">geral</span>
+                {generalUnread > 0 && currentChannelId !== null && (
+                  <span className="channel-row-unread">{generalUnread > 99 ? "99+" : generalUnread}</span>
+                )}
               </div>
             </button>
           )}
 
-          {filteredChannels.map((c) => (
-            <button
-              key={c.id}
-              className={`channel-row${currentChannelId === c.id ? " active" : ""}`}
-              onClick={() => setCurrentChannelId(c.id)}
-            >
-              <div className="channel-row-head">
-                <span className="channel-row-icon"><Ico.hash /></span>
-                <span className="channel-row-name">{c.name}</span>
-                {isOwner && (
-                  <span
-                    className="channel-row-delete"
-                    onClick={(e) => handleDeleteChannel(c, e)}
-                    title="Deletar canal"
-                  >
-                    ×
-                  </span>
-                )}
-              </div>
-            </button>
-          ))}
+          {filteredChannels.map((c) => {
+            const unread = c.unreadCount ?? 0;
+            const showBadge = unread > 0 && currentChannelId !== c.id;
+            return (
+              <button
+                key={c.id}
+                className={`channel-row${currentChannelId === c.id ? " active" : ""}${showBadge ? " unread" : ""}`}
+                onClick={() => switchChannel(c.id)}
+              >
+                <div className="channel-row-head">
+                  <span className="channel-row-icon"><Ico.hash /></span>
+                  <span className="channel-row-name">{c.name}</span>
+                  {showBadge && (
+                    <span className="channel-row-unread">{unread > 99 ? "99+" : unread}</span>
+                  )}
+                  {isOwner && (
+                    <span
+                      className="channel-row-delete"
+                      onClick={(e) => handleDeleteChannel(c, e)}
+                      title="Deletar canal"
+                    >
+                      ×
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
 
           {/* Voice section */}
           <SectionLabel
@@ -525,6 +562,7 @@ export function ServerPage() {
           channelName={activeChannelName}
           onToggleMembers={() => setShowMembers((v) => !v)}
           onOpenPins={() => setShowPins(true)}
+          onChannelMessage={onChannelMessage}
           membersVisible={showMembers}
         />
       )}

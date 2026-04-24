@@ -13,6 +13,7 @@ export interface TextChannel {
   name: string;
   serverId: string;
   createdAt: string;
+  unreadCount?: number;
 }
 
 export interface PinnedMessage {
@@ -176,7 +177,13 @@ export const api = {
     }),
 
   listChannels: (token: string, serverId: string) =>
-    request<{ channels: TextChannel[] }>(`/servers/${serverId}/channels`, { token }),
+    request<{ channels: TextChannel[]; generalUnread: number }>(`/servers/${serverId}/channels`, { token }),
+
+  markChannelRead: (token: string, serverId: string, channelId: string) =>
+    request<void>(`/servers/${serverId}/channels/${channelId}/read`, {
+      method: "POST",
+      token,
+    }),
 
   createChannel: (token: string, serverId: string, name: string) =>
     request<{ channel: TextChannel }>(`/servers/${serverId}/channels`, {

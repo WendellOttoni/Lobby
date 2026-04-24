@@ -6,7 +6,6 @@ const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 const channelRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("preHandler", fastify.authenticate);
 
-  // List text channels
   fastify.get("/:serverId/channels", async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId } = request.params as { serverId: string };
@@ -21,10 +20,45 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       orderBy: { createdAt: "asc" },
     });
 
-    return reply.send({ channels });
+    const reads = channels.length > 0
+      ? await prisma.channelRead.findMany({
+          where: { userId: sub, channelId: { in: channels.map((c) => c.id) } },
+        })
+      : [];
+    const readMap = new Map(reads.map((r) => [r.channelId, r.lastReadAt]));
+
+    const counts = await Promise.all(
+      channels.map(async (c) => {
+        const lastReadAt = readMap.get(c.id);
+        const unreadCount = await prisma.message.count({
+          where: {
+            channelId: c.id,
+            authorId: { not: sub },
+            ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+          },
+        });
+        return {
+          id: c.id,
+          name: c.name,
+          serverId: c.serverId,
+          createdAt: c.createdAt,
+          unreadCount,
+        };
+      })
+    );
+
+    const generalUnread = await prisma.message.count({
+      where: {
+        serverId,
+        channelId: null,
+        authorId: { not: sub },
+        createdAt: { gt: member.lastReadAt },
+      },
+    });
+
+    return reply.send({ channels: counts, generalUnread });
   });
 
-  // Create text channel (owner only)
   fastify.post("/:serverId/channels", {
     config: mutateLimit,
     schema: {
@@ -51,7 +85,6 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
-  // Delete text channel (owner only)
   fastify.delete("/:serverId/channels/:channelId", async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId, channelId } = request.params as { serverId: string; channelId: string };
@@ -65,6 +98,25 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
 
     await prisma.textChannel.delete({ where: { id: channelId } });
     return reply.status(204).send();
+  });
+
+  fastify.post("/:serverId/channels/:channelId/read", {
+    config: mutateLimit,
+    handler: async (request, reply) => {
+      const { sub } = request.user as { sub: string };
+      const { serverId, channelId } = request.params as { serverId: string; channelId: string };
+
+      const channel = await prisma.textChannel.findFirst({ where: { id: channelId, serverId } });
+      if (!channel) return reply.status(404).send({ error: "Canal não encontrado" });
+
+      await prisma.channelRead.upsert({
+        where: { userId_channelId: { userId: sub, channelId } },
+        create: { userId: sub, channelId, lastReadAt: new Date() },
+        update: { lastReadAt: new Date() },
+      });
+
+      return reply.status(204).send();
+    },
   });
 };
 
