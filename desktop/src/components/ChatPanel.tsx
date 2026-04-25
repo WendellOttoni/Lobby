@@ -161,6 +161,10 @@ export function ChatPanel({
 }: Props) {
   const onChannelMessageRef = useRef(onChannelMessage);
   useEffect(() => { onChannelMessageRef.current = onChannelMessage; }, [onChannelMessage]);
+  const channelIdRef = useRef(channelId);
+  useEffect(() => { channelIdRef.current = channelId; }, [channelId]);
+  const currentUsernameRef = useRef(currentUsername);
+  useEffect(() => { currentUsernameRef.current = currentUsername; }, [currentUsername]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
@@ -265,6 +269,7 @@ export function ChatPanel({
     setMessages([]);
     setHistoryLoaded(false);
     setReplyTo(null);
+    setTypers({});
     let cancelled = false;
     let retryDelay = 1000;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -288,9 +293,7 @@ export function ChatPanel({
       ws.onopen = () => {
         openedAt = Date.now();
         setConnected(true);
-        if (channelId !== null) {
-          ws.send(JSON.stringify({ type: "selectChannel", channelId }));
-        }
+        ws.send(JSON.stringify({ type: "selectChannel", channelId: channelIdRef.current }));
       };
 
       ws.onclose = () => {
@@ -303,8 +306,11 @@ export function ChatPanel({
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        const activeChannelId = channelIdRef.current;
         if (data.type === "history") {
           const incoming: ChatMessage[] = data.messages;
+          const targetChannelId = "channelId" in data ? data.channelId : null;
+          if (targetChannelId !== activeChannelId) return;
           if (data.replace) {
             setMessages(incoming);
             setHasMore(incoming.length >= 80);
@@ -322,12 +328,14 @@ export function ChatPanel({
           }
         } else if (data.type === "message") {
           const msg = data as ChatMessage & { type: string };
-          setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+          if (msg.channelId === activeChannelId) {
+            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+          }
           if (msg.authorId !== currentUserId) {
             onChannelMessageRef.current?.(msg.channelId, msg.authorId);
-            if (msg.channelId === channelId) {
+            if (msg.channelId === activeChannelId) {
               scheduleMarkRead();
-              const mentioned = msg.content.includes(`@${currentUsername}`);
+              const mentioned = msg.content.includes(`@${currentUsernameRef.current}`);
               if (document.hidden || mentioned) playMessageSound();
             }
           }
@@ -348,7 +356,7 @@ export function ChatPanel({
             )
           );
         } else if (data.type === "typing") {
-          if (data.channelId !== channelId) return;
+          if (data.channelId !== activeChannelId) return;
           setTypers((prev) => {
             const next = { ...prev };
             if (data.typing) next[data.userId] = data.username;
@@ -370,7 +378,23 @@ export function ChatPanel({
       }
       wsRef.current?.close();
     };
-  }, [serverId, token, currentUserId, channelId]);
+  }, [serverId, token, currentUserId]);
+
+  useEffect(() => {
+    setMessages([]);
+    setHistoryLoaded(false);
+    setReplyTo(null);
+    setTypers({});
+    setHasMore(false);
+    setLoadingMore(false);
+    if (markReadTimer.current) {
+      clearTimeout(markReadTimer.current);
+      markReadTimer.current = null;
+    }
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: "selectChannel", channelId }));
+    }
+  }, [channelId]);
 
   useEffect(() => {
     let cancelled = false;

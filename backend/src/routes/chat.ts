@@ -227,20 +227,6 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         conn.isAlive = true;
       });
 
-      const history = await prisma.message.findMany({
-        where: { serverId, channelId: null },
-        orderBy: { createdAt: "asc" },
-        take: 80,
-        include: MESSAGE_INCLUDE,
-      });
-      socket.send(
-        JSON.stringify({
-          type: "history",
-          channelId: null,
-          messages: history.map(serialize),
-        })
-      );
-
       function sendError(message: string) {
         socket.send(JSON.stringify({ type: "error", message }));
       }
