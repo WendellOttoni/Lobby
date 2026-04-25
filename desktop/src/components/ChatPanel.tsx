@@ -1,4 +1,5 @@
 import { FormEvent, ReactNode, Suspense, lazy, memo, useCallback, useEffect, useRef, useState } from "react";
+import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
 import { Avatar } from "./Avatar";
@@ -96,6 +97,8 @@ function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean 
 
 const FORMAT_RE = /```(?:(\w+)\n)?([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
 
+const START_INDEX = 100_000;
+
 function formatMessage(text: string, currentUsername: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIdx = 0;
@@ -159,6 +162,8 @@ export function ChatPanel({
   const [typers, setTypers] = useState<Record<string, string>>({});
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [firstItemIndex, setFirstItemIndex] = useState(START_INDEX);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [members, setMembers] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -168,11 +173,8 @@ export function ChatPanel({
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
 
   function autoResize() {
     const el = inputRef.current;
@@ -259,13 +261,22 @@ export function ChatPanel({
   }
 
   const scrollToMessage = useCallback((id: string) => {
-    const el = document.getElementById(`msg-${id}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.add("chat-msg-flash");
-      setTimeout(() => el.classList.remove("chat-msg-flash"), 1500);
-    }
-  }, []);
+    const list = messagesRef.current;
+    const localIdx = list.findIndex((m) => m.id === id);
+    if (localIdx === -1) return;
+    virtuosoRef.current?.scrollToIndex({
+      index: firstItemIndex + localIdx,
+      behavior: "smooth",
+      align: "center",
+    });
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${id}`);
+      if (el) {
+        el.classList.add("chat-msg-flash");
+        setTimeout(() => el.classList.remove("chat-msg-flash"), 1500);
+      }
+    }, 350);
+  }, [firstItemIndex]);
 
   useEffect(() => {
     setMessages([]);
@@ -315,16 +326,17 @@ export function ChatPanel({
           if (targetChannelId !== activeChannelId) return;
           if (data.replace) {
             setMessages(incoming);
+            setFirstItemIndex(START_INDEX - incoming.length);
             setHasMore(incoming.length >= 80);
             setHistoryLoaded(true);
           } else if (data.prepend) {
-            const sc = scrollRef.current;
-            if (sc) prependAnchorRef.current = { height: sc.scrollHeight, top: sc.scrollTop };
             setMessages((prev) => mergeHistory(incoming, prev));
+            setFirstItemIndex((idx) => idx - incoming.length);
             setHasMore(incoming.length >= 40);
             setLoadingMore(false);
           } else {
             setMessages((prev) => mergeHistory(prev, incoming));
+            setFirstItemIndex(START_INDEX - incoming.length);
             setHasMore(incoming.length >= 80);
             setHistoryLoaded(true);
           }
@@ -405,19 +417,6 @@ export function ChatPanel({
       .catch(() => {});
     return () => { cancelled = true; };
   }, [serverId, token]);
-
-  useEffect(() => {
-    const anchor = prependAnchorRef.current;
-    if (anchor) {
-      const sc = scrollRef.current;
-      if (sc) sc.scrollTop = anchor.top + (sc.scrollHeight - anchor.height);
-      prependAnchorRef.current = null;
-      return;
-    }
-    if (!loadingMore) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [messages]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -541,28 +540,8 @@ export function ChatPanel({
         </span>
       </div>
 
-      <div className="chat-scroll" ref={scrollRef} onScroll={(e) => {
-        if ((e.currentTarget as HTMLDivElement).scrollTop < 80) loadMore();
-      }}>
-        {loadingMore && <div className="chat-load-more-spinner">Carregando...</div>}
-        {!loadingMore && hasMore && (
-          <button className="chat-load-more-btn" onClick={loadMore}>
-            Carregar mensagens anteriores
-          </button>
-        )}
-        <div className="chat-intro">
-          <div className="chat-intro-tile">
-            <Ico.hash />
-          </div>
-          <h2>
-            Bem-vindo ao <span className="brand-text">#{channelName}</span>
-          </h2>
-          <p>
-            Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
-          </p>
-        </div>
-
-        {!historyLoaded && (
+      {!historyLoaded ? (
+        <div className="chat-scroll">
           <div className="chat-skeleton">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="chat-skeleton-row">
@@ -574,49 +553,93 @@ export function ChatPanel({
               </div>
             ))}
           </div>
-        )}
-
-        {historyLoaded && visibleMessages.length === 0 && (
+        </div>
+      ) : visibleMessages.length === 0 ? (
+        <div className="chat-scroll">
+          <div className="chat-intro">
+            <div className="chat-intro-tile">
+              <Ico.hash />
+            </div>
+            <h2>
+              Bem-vindo ao <span className="brand-text">#{channelName}</span>
+            </h2>
+            <p>
+              Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
+            </p>
+          </div>
           <div className="chat-empty">
             <p>Nenhuma mensagem ainda.</p>
             <p>Seja o primeiro a falar!</p>
           </div>
-        )}
-
-        {visibleMessages.map((msg, i) => {
-          const prev = visibleMessages[i - 1];
-          const grouped = shouldGroup(prev, msg);
-          const showDate = i === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
-          const isAuthor = msg.authorId === currentUserId;
-          const isThisEditing = editingId === msg.id;
-          return (
-            <Message
-              key={msg.id}
-              msg={msg}
-              grouped={grouped}
-              showDate={showDate}
-              canEdit={isAuthor}
-              canDelete={isAuthor || isOwner}
-              canPin={isOwner}
-              isEditing={isThisEditing}
-              editDraft={isThisEditing ? editDraft : ""}
-              currentUserId={currentUserId}
-              currentUsername={currentUsername}
-              token={token}
-              onStartEdit={startEdit}
-              onCancelEdit={cancelEdit}
-              onCommitEdit={commitEdit}
-              onChangeEdit={setEditDraft}
-              onDelete={deleteMessage}
-              onReact={reactToMessage}
-              onReply={replyToMessage}
-              onPin={togglePin}
-              onJumpTo={scrollToMessage}
-            />
-          );
-        })}
-        <div ref={bottomRef} style={{ height: 12 }} />
-      </div>
+        </div>
+      ) : (
+        <Virtuoso
+          ref={virtuosoRef}
+          className="chat-scroll"
+          data={visibleMessages}
+          firstItemIndex={firstItemIndex}
+          initialTopMostItemIndex={visibleMessages.length - 1}
+          startReached={loadMore}
+          followOutput="smooth"
+          atBottomThreshold={120}
+          increaseViewportBy={{ top: 400, bottom: 200 }}
+          components={{
+            Header: () =>
+              loadingMore ? (
+                <div className="chat-load-more-spinner">Carregando...</div>
+              ) : hasMore ? (
+                <button className="chat-load-more-btn" onClick={loadMore}>
+                  Carregar mensagens anteriores
+                </button>
+              ) : (
+                <div className="chat-intro">
+                  <div className="chat-intro-tile">
+                    <Ico.hash />
+                  </div>
+                  <h2>
+                    Bem-vindo ao <span className="brand-text">#{channelName}</span>
+                  </h2>
+                  <p>
+                    Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
+                  </p>
+                </div>
+              ),
+            Footer: () => <div style={{ height: 12 }} />,
+          }}
+          itemContent={(absoluteIndex, msg) => {
+            const localIdx = absoluteIndex - firstItemIndex;
+            const prev = visibleMessages[localIdx - 1];
+            const grouped = shouldGroup(prev, msg);
+            const showDate = localIdx === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
+            const isAuthor = msg.authorId === currentUserId;
+            const isThisEditing = editingId === msg.id;
+            return (
+              <Message
+                msg={msg}
+                grouped={grouped}
+                showDate={showDate}
+                canEdit={isAuthor}
+                canDelete={isAuthor || isOwner}
+                canPin={isOwner}
+                isEditing={isThisEditing}
+                editDraft={isThisEditing ? editDraft : ""}
+                currentUserId={currentUserId}
+                currentUsername={currentUsername}
+                token={token}
+                onStartEdit={startEdit}
+                onCancelEdit={cancelEdit}
+                onCommitEdit={commitEdit}
+                onChangeEdit={setEditDraft}
+                onDelete={deleteMessage}
+                onReact={reactToMessage}
+                onReply={replyToMessage}
+                onPin={togglePin}
+                onJumpTo={scrollToMessage}
+              />
+            );
+          }}
+        />
+      )}
 
       <TypingBar typers={typers} />
       {replyTo && (
