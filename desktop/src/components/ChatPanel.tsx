@@ -360,9 +360,6 @@ export function ChatPanel({
     }
 
     open();
-    api.listMembers(token, serverId)
-      .then(({ members }) => setMembers(members.map((m) => m.username)))
-      .catch(() => {});
 
     return () => {
       cancelled = true;
@@ -374,6 +371,14 @@ export function ChatPanel({
       wsRef.current?.close();
     };
   }, [serverId, token, currentUserId, channelId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.listMembers(token, serverId)
+      .then(({ members }) => { if (!cancelled) setMembers(members.map((m) => m.username)); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [serverId, token]);
 
   useEffect(() => {
     const anchor = prependAnchorRef.current;

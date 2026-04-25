@@ -102,6 +102,13 @@ function touchTyping(serverId: string, userId: string, username: string, channel
   }, 4000));
 }
 
+const EMOJI_RE = /^(\p{Extended_Pictographic}(\u{FE0F}|\u{200D}\p{Extended_Pictographic})*)+$/u;
+
+function isValidEmoji(s: string): boolean {
+  if (s.length === 0 || s.length > 16) return false;
+  return EMOJI_RE.test(s);
+}
+
 function snippet(content: string): string {
   const trimmed = content.trim().replace(/\s+/g, " ");
   return trimmed.length > 120 ? trimmed.slice(0, 117) + "..." : trimmed;
@@ -296,6 +303,11 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (data.type === "message") {
             if (!data.content?.trim()) return;
+            const rawContent = String(data.content);
+            if (rawContent.length > 2000) {
+              sendError("Mensagem muito longa (máx. 2000 caracteres).");
+              return;
+            }
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
             const replyToId = typeof data.replyToId === "string" ? data.replyToId : null;
             stopTyping(serverId, userId, username, channelId);
@@ -320,7 +332,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               }
             }
 
-            const content = String(data.content).trim().slice(0, 2000);
+            const content = rawContent.trim();
             const msg = await prisma.message.create({
               data: { content, authorId: userId, serverId, channelId, replyToId },
               include: MESSAGE_INCLUDE,
@@ -339,7 +351,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
           if (data.type === "react") {
             const id = typeof data.id === "string" ? data.id : null;
             const emoji = typeof data.emoji === "string" ? data.emoji.trim() : "";
-            if (!id || !emoji || emoji.length > 8) return;
+            if (!id || !emoji || !isValidEmoji(emoji)) return;
 
             const msg = await prisma.message.findUnique({ where: { id } });
             if (!msg || msg.serverId !== serverId) return;
@@ -371,6 +383,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             const id = typeof data.id === "string" ? data.id : null;
             const content = typeof data.content === "string" ? data.content.trim() : "";
             if (!id || !content) return;
+            if (content.length > 2000) {
+              sendError("Mensagem muito longa (máx. 2000 caracteres).");
+              return;
+            }
 
             const existing = await prisma.message.findUnique({ where: { id } });
             if (!existing || existing.serverId !== serverId) return;
@@ -381,7 +397,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
             const updated = await prisma.message.update({
               where: { id },
-              data: { content: content.slice(0, 2000), editedAt: new Date() },
+              data: { content, editedAt: new Date() },
             });
 
             broadcast(

@@ -5,8 +5,9 @@ const TIMEOUT_MS = 4000;
 const MAX_BYTES = 100_000;
 const MAX_CACHE_ENTRIES = 500;
 
-const cache = new Map<string, { data: UnfurlResult; ts: number }>();
+const cache = new Map<string, { data: UnfurlResult; ts: number; ttl: number }>();
 const CACHE_TTL_MS = 10 * 60 * 1000;
+const FAILURE_TTL_MS = 60 * 1000;
 
 const PRIVATE_HOST_RE = /^(localhost|127\.|10\.|192\.168\.|169\.254\.|::1|fc00:|fd00:|fe80:)/i;
 const PRIVATE_172_RE = /^172\.(1[6-9]|2\d|3[01])\./;
@@ -29,10 +30,23 @@ interface UnfurlResult {
   siteName?: string;
 }
 
+function rememberFailure(url: string): UnfurlResult {
+  storeInCache(url, {}, FAILURE_TTL_MS);
+  return {};
+}
+
+function storeInCache(url: string, data: UnfurlResult, ttl: number) {
+  if (cache.size >= MAX_CACHE_ENTRIES) {
+    const firstKey = cache.keys().next().value;
+    if (firstKey) cache.delete(firstKey);
+  }
+  cache.set(url, { data, ts: Date.now(), ttl });
+}
+
 async function fetchMeta(url: string, depth = 0): Promise<UnfurlResult> {
   if (depth > 3) return {};
   const cached = cache.get(url);
-  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.data;
+  if (cached && Date.now() - cached.ts < cached.ttl) return cached.data;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -47,19 +61,19 @@ async function fetchMeta(url: string, depth = 0): Promise<UnfurlResult> {
 
     if (res.status >= 300 && res.status < 400) {
       const next = res.headers.get("location");
-      if (!next) return {};
+      if (!next) return rememberFailure(url);
       const absolute = new URL(next, url).toString();
-      if (!isPublicHttpUrl(absolute) || absolute === url) return {};
+      if (!isPublicHttpUrl(absolute) || absolute === url) return rememberFailure(url);
       return fetchMeta(absolute, depth + 1);
     }
 
-    if (!res.ok) return {};
+    if (!res.ok) return rememberFailure(url);
 
     const contentType = res.headers.get("content-type") ?? "";
-    if (!contentType.includes("text/html")) return {};
+    if (!contentType.includes("text/html")) return rememberFailure(url);
 
     const reader = res.body?.getReader();
-    if (!reader) return {};
+    if (!reader) return rememberFailure(url);
 
     let bytes = 0;
     const chunks: Uint8Array[] = [];
@@ -93,15 +107,12 @@ async function fetchMeta(url: string, depth = 0): Promise<UnfurlResult> {
       siteName: og("site_name"),
     };
 
-    if (cache.size >= MAX_CACHE_ENTRIES) {
-      const firstKey = cache.keys().next().value;
-      if (firstKey) cache.delete(firstKey);
-    }
-    cache.set(url, { data: result, ts: Date.now() });
+    const ttl = result.title || result.image ? CACHE_TTL_MS : FAILURE_TTL_MS;
+    storeInCache(url, result, ttl);
     return result;
   } catch {
     clearTimeout(timer);
-    return {};
+    return rememberFailure(url);
   }
 }
 
