@@ -32,7 +32,7 @@ const ALLOWED_PTT_KEYS: Record<string, string> = {
 };
 
 export function SettingsModal({ onClose }: Props) {
-  const { user, token, setUser } = useAuth();
+  const { user, token, setUser, logout } = useAuth();
   const voice = useVoice();
 
   const [username, setUsername] = useState(user?.username ?? "");
@@ -47,6 +47,10 @@ export function SettingsModal({ onClose }: Props) {
   const [version, setVersion] = useState<string | null>(null);
 
   const [recordingKey, setRecordingKey] = useState<"ptt" | "mute" | "deafen" | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [autostart, setAutostart] = useState<boolean | null>(null);
   const [notifyJoin, setNotifyJoin] = useState(() => isNotifyJoinEnabled());
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
@@ -148,6 +152,20 @@ export function SettingsModal({ onClose }: Props) {
       else voice.setDeafenKey(tauriKey);
       setRecordingKey(null);
     };
+  }
+
+  async function handleDeleteAccount() {
+    if (!token) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await api.deleteAccount(token);
+      logout();
+      onClose();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Erro ao deletar conta");
+      setDeleting(false);
+    }
   }
 
   const updateLabel: Record<UpdateStatus, string> = {
@@ -371,6 +389,46 @@ export function SettingsModal({ onClose }: Props) {
                 </div>
               )}
             </div>
+          </section>
+          <section className="settings-section settings-danger-zone">
+            <h3>Zona de perigo</h3>
+            {!showDeleteConfirm ? (
+              <button
+                className="btn-danger-outline"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                Deletar conta
+              </button>
+            ) : (
+              <div className="settings-delete-confirm">
+                <p>
+                  Isso é permanente. Todos os seus dados serão apagados.
+                  Digite <strong>{user?.username}</strong> para confirmar.
+                </p>
+                <input
+                  value={deleteConfirmInput}
+                  onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                  placeholder={user?.username}
+                  autoFocus
+                />
+                {deleteError && <p className="error" style={{ fontSize: 12 }}>{deleteError}</p>}
+                <div className="settings-delete-actions">
+                  <button
+                    className="btn-danger-outline"
+                    onClick={handleDeleteAccount}
+                    disabled={deleteConfirmInput !== user?.username || deleting}
+                  >
+                    {deleting ? "Deletando..." : "Confirmar exclusão"}
+                  </button>
+                  <button
+                    className="btn-secondary"
+                    onClick={() => { setShowDeleteConfirm(false); setDeleteConfirmInput(""); setDeleteError(null); }}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </div>

@@ -9,7 +9,7 @@ import {
   RoomEvent,
   Track,
 } from "livekit-client";
-import { isPermissionGranted, requestPermission, sendNotification } from "@tauri-apps/plugin-notification";
+import { notify } from "../lib/notify";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { api } from "../lib/api";
 
@@ -98,18 +98,7 @@ export function setNotifyJoinEnabled(enabled: boolean) {
 
 async function notifyParticipantJoined(name: string) {
   if (!isNotifyJoinEnabled()) return;
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) {
-      const perm = await requestPermission();
-      granted = perm === "granted";
-    }
-    if (granted) {
-      sendNotification({ title: "Lobby", body: `${name} entrou na sala` });
-    }
-  } catch {
-    // notificações não críticas — falha silenciosa
-  }
+  notify("Lobby", `${name} entrou na sala`).catch(() => {});
 }
 
 export function VoiceProvider({ children }: { children: ReactNode }) {

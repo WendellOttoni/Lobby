@@ -19,6 +19,10 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("[ErrorBoundary]", error, info.componentStack);
   }
 
+  handleRetry = () => {
+    this.setState({ error: null });
+  };
+
   handleReload = () => {
     window.location.reload();
   };
@@ -35,7 +39,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <summary>Detalhes técnicos</summary>
             <pre>{this.state.error.message}</pre>
           </details>
-          <button onClick={this.handleReload}>Recarregar app</button>
+          <div className="error-boundary-actions">
+            <button onClick={this.handleRetry}>Tentar novamente</button>
+            <button className="btn-secondary" onClick={this.handleReload}>Recarregar app</button>
+          </div>
         </div>
       </div>
     );

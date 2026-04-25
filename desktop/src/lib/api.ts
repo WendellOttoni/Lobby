@@ -245,6 +245,9 @@ export const api = {
       { token }
     ),
 
+  deleteAccount: (token: string) =>
+    request<void>("/auth/me", { method: "DELETE", token }),
+
   unfurl: (token: string, url: string) =>
     request<{ title?: string; description?: string; image?: string; siteName?: string }>(
       `/unfurl?url=${encodeURIComponent(url)}`,

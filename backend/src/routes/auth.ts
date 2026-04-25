@@ -121,6 +121,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   );
 
+  fastify.delete(
+    "/me",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const { sub } = request.user as { sub: string };
+      await prisma.user.delete({ where: { id: sub } });
+      return reply.status(204).send();
+    }
+  );
+
   fastify.patch(
     "/me",
     { preHandler: [fastify.authenticate] },
