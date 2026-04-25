@@ -68,11 +68,12 @@ function broadcast(serverId: string, payload: string, excludeUserId?: string) {
 }
 
 function broadcastTyping(serverId: string, userId: string, username: string, typing: boolean, channelId: string | null) {
-  broadcast(
-    serverId,
-    JSON.stringify({ type: "typing", userId, username, typing, channelId }),
-    userId
-  );
+  const payload = JSON.stringify({ type: "typing", userId, username, typing, channelId });
+  rooms.get(serverId)?.forEach((conn) => {
+    if (conn.userId === userId) return;
+    if (conn.currentChannelId !== channelId) return;
+    if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(payload);
+  });
 }
 
 function stopTyping(serverId: string, userId: string, username: string, channelId: string | null) {
