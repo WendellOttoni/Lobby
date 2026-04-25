@@ -231,7 +231,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     pttActiveRef.current = false;
   }
 
-  async function connect(authToken: string, serverId: string, roomId: string, roomName: string) {
+  async function connect(authToken: string, serverId: string, roomId: string, roomName: string, isReconnectAttempt = false) {
     setError(null);
 
     if (reconnectTimerRef.current) {
@@ -246,7 +246,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     shouldReconnectRef.current = true;
     reconnectParamsRef.current = { authToken, serverId, roomId, roomName };
-    reconnectAttemptsRef.current = 0;
+    if (!isReconnectAttempt) reconnectAttemptsRef.current = 0;
 
     const room = new Room({ dynacast: true });
     roomRef.current = room;
@@ -314,7 +314,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
             setIsReconnecting(true);
             reconnectTimerRef.current = setTimeout(() => {
               if (shouldReconnectRef.current && reconnectParamsRef.current) {
-                connect(params.authToken, params.serverId, params.roomId, params.roomName);
+                connect(params.authToken, params.serverId, params.roomId, params.roomName, true);
               }
             }, delay);
           } else {
@@ -405,7 +405,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       active = false;
       unregister(muteKey).catch(() => {});
     };
-  }, [muteKey, isMuted]);
+  }, [muteKey]);
 
   useEffect(() => {
     if (!deafenKey) return;
