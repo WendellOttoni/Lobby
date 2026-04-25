@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcrypt";
 import prisma from "../db/client.js";
-import { updatePresence } from "../services/presence.js";
+import { updatePresence, getPresence } from "../services/presence.js";
 
 const SALT_ROUNDS = 12;
 
@@ -114,8 +114,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     async (request, reply) => {
       const { sub, username } = request.user as { sub: string; username: string };
       const { game } = (request.body ?? {}) as { game?: string | null };
-      const user = await prisma.user.findUnique({ where: { id: sub }, select: { statusText: true } });
-      updatePresence(sub, username, game ?? null, user?.statusText ?? null);
+      const existing = getPresence(sub);
+      const statusText = existing?.statusText ?? (await prisma.user.findUnique({ where: { id: sub }, select: { statusText: true } }))?.statusText ?? null;
+      updatePresence(sub, username, game ?? null, statusText);
       return reply.status(204).send();
     }
   );

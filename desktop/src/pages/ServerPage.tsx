@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
@@ -47,6 +47,25 @@ export function ServerPage() {
   } | null>(null);
 
   const isOwner = server?.ownerId === user?.id;
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function close() { setMenuOpen(false); }
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, [menuOpen]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   async function loadRooms() {
     if (!token || !serverId) return;
@@ -184,7 +203,6 @@ export function ServerPage() {
       voice.disconnect();
       await api.leaveServer(token, serverId);
       navigate("/servers", { replace: true });
-      window.location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao sair do servidor");
     }
@@ -210,7 +228,6 @@ export function ServerPage() {
       voice.disconnect();
       await api.deleteServer(token, serverId);
       navigate("/servers", { replace: true });
-      window.location.reload();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao deletar servidor");
     }
@@ -252,33 +269,10 @@ export function ServerPage() {
           >
             ⋯
             {menuOpen && (
-              <div
-                className="rooms-menu-popover"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  position: "absolute",
-                  top: 30,
-                  right: 0,
-                  background: "var(--surface-2)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 10,
-                  padding: 6,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                  minWidth: 180,
-                  boxShadow: "0 10px 30px rgba(0,0,0,0.5)",
-                  zIndex: 20,
-                  textAlign: "left",
-                }}
-              >
+              <div className="rooms-menu-popover" onClick={(e) => e.stopPropagation()}>
                 <button
                   className="btn-secondary"
-                  onClick={() => {
-                    setShowInvite((v) => !v);
-                    setMenuOpen(false);
-                  }}
-                  style={{ background: "transparent", justifyContent: "flex-start" }}
+                  onClick={() => { setShowInvite((v) => !v); setMenuOpen(false); }}
                 >
                   Convite
                 </button>
@@ -286,38 +280,21 @@ export function ServerPage() {
                   <button
                     className="btn-secondary"
                     onClick={() => { setShowTransfer(true); setMenuOpen(false); }}
-                    style={{ background: "transparent", justifyContent: "flex-start" }}
                   >
                     Transferir servidor
                   </button>
                 )}
                 {isOwner ? (
                   <button
-                    className="btn-secondary"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleDeleteServer();
-                    }}
-                    style={{
-                      background: "transparent",
-                      color: "var(--danger)",
-                      justifyContent: "flex-start",
-                    }}
+                    className="btn-secondary btn-danger"
+                    onClick={() => { setMenuOpen(false); handleDeleteServer(); }}
                   >
                     Deletar servidor
                   </button>
                 ) : (
                   <button
-                    className="btn-secondary"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      handleLeaveServer();
-                    }}
-                    style={{
-                      background: "transparent",
-                      color: "var(--danger)",
-                      justifyContent: "flex-start",
-                    }}
+                    className="btn-secondary btn-danger"
+                    onClick={() => { setMenuOpen(false); handleLeaveServer(); }}
                   >
                     Sair do servidor
                   </button>
@@ -331,6 +308,7 @@ export function ServerPage() {
           <div className="rooms-search-box">
             <Ico.search />
             <input
+              ref={searchRef}
               placeholder="Buscar canais…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -620,11 +598,12 @@ function TransferModal({
   onClose: () => void;
 }) {
   const [members, setMembers] = useState<import("../lib/api").Member[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api.listMembers(token, serverId).then(({ members }) =>
-      setMembers(members.filter((m) => m.id !== currentUserId))
-    ).catch(() => {});
+    api.listMembers(token, serverId)
+      .then(({ members }) => setMembers(members.filter((m) => m.id !== currentUserId)))
+      .catch((err) => setError(err instanceof Error ? err.message : "Erro ao listar membros"));
   }, [token, serverId, currentUserId]);
 
   return (
@@ -634,7 +613,8 @@ function TransferModal({
         <p style={{ fontSize: 12, color: "var(--text-dim)", padding: "4px 0 8px" }}>
           Escolha o novo dono. Você vira membro.
         </p>
-        {members.length === 0 && (
+        {error && <p className="error" style={{ fontSize: 12, padding: "4px 0" }}>{error}</p>}
+        {members.length === 0 && !error && (
           <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Sem outros membros.</p>
         )}
         {members.map((m) => (

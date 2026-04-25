@@ -27,25 +27,30 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       : [];
     const readMap = new Map(reads.map((r) => [r.channelId, r.lastReadAt]));
 
-    const counts = await Promise.all(
-      channels.map(async (c) => {
-        const lastReadAt = readMap.get(c.id);
-        const unreadCount = await prisma.message.count({
+    const unreadGroups = channels.length > 0
+      ? await prisma.message.groupBy({
+          by: ["channelId"],
           where: {
-            channelId: c.id,
             authorId: { not: sub },
-            ...(lastReadAt ? { createdAt: { gt: lastReadAt } } : {}),
+            OR: channels.map((c) => {
+              const lastReadAt = readMap.get(c.id);
+              return lastReadAt
+                ? { channelId: c.id, createdAt: { gt: lastReadAt } }
+                : { channelId: c.id };
+            }),
           },
-        });
-        return {
-          id: c.id,
-          name: c.name,
-          serverId: c.serverId,
-          createdAt: c.createdAt,
-          unreadCount,
-        };
-      })
-    );
+          _count: { _all: true },
+        })
+      : [];
+    const unreadByChannel = new Map(unreadGroups.map((r) => [r.channelId, r._count._all]));
+
+    const counts = channels.map((c) => ({
+      id: c.id,
+      name: c.name,
+      serverId: c.serverId,
+      createdAt: c.createdAt,
+      unreadCount: unreadByChannel.get(c.id) ?? 0,
+    }));
 
     const generalUnread = await prisma.message.count({
       where: {

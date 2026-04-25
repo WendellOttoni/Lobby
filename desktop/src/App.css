@@ -1994,3 +1994,90 @@ a:hover { text-decoration: underline; }
 .settings-hotkey-label { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .settings-hotkey-label strong { font-size: 13px; color: var(--text); }
 .settings-hotkey-label span { font-size: 11px; color: var(--text-dim); }
+
+/* ============================================
+   Context menu (participant right-click, TransferModal)
+   ============================================ */
+.ctx-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+.ctx-menu {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 200px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 201;
+}
+.ctx-menu-header {
+  padding: 6px 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 6px;
+}
+.ctx-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.ctx-menu-row span { color: var(--text-dim); white-space: nowrap; }
+.ctx-menu-row input[type="text"],
+.ctx-menu-row input:not([type="range"]):not([type="submit"]):not([type="button"]) {
+  flex: 1;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+.ctx-menu-row.column { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
+.ctx-menu-row-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.ctx-menu-row-header span { color: var(--text-dim); }
+.ctx-menu-vol-value { color: var(--text) !important; font-weight: 600; }
+.ctx-menu-row input[type="range"] { width: 100%; accent-color: var(--purple); cursor: pointer; }
+.ctx-menu-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 6px 4px 2px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 6px;
+}
+
+/* ============================================
+   Server options popover (⋯ button)
+   ============================================ */
+.rooms-menu-popover {
+  position: absolute;
+  top: 30px;
+  right: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+  text-align: left;
+}
+.rooms-menu-popover .btn-secondary {
+  background: transparent;
+  justify-content: flex-start;
+}
+.rooms-menu-popover .btn-danger {
+  background: transparent;
+  color: var(--danger);
+  justify-content: flex-start;
+}
