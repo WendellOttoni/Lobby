@@ -1,10 +1,11 @@
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
-import EmojiPicker, { EmojiStyle, Theme } from "emoji-picker-react";
-import { Highlight, themes } from "prism-react-renderer";
+import { FormEvent, ReactNode, Suspense, lazy, memo, useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
+
+const EmojiPicker = lazy(() => import("./LazyEmojiPicker"));
+const CodeBlock = lazy(() => import("./LazyCodeBlock"));
 
 interface ReactionCount {
   emoji: string;
@@ -95,27 +96,6 @@ function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean 
 
 const FORMAT_RE = /```(?:(\w+)\n)?([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
 
-function CodeBlock({ lang, code }: { lang: string | undefined; code: string }) {
-  return (
-    <Highlight theme={themes.vsDark} code={code.replace(/\n$/, "")} language={lang ?? "text"}>
-      {({ className, style, tokens, getLineProps, getTokenProps }) => (
-        <pre className={`chat-msg-codeblock ${className}`} style={style}>
-          {lang && <span className="chat-msg-codeblock-lang">{lang}</span>}
-          <code>
-            {tokens.map((line, i) => (
-              <div key={i} {...getLineProps({ line })}>
-                {line.map((token, j) => (
-                  <span key={j} {...getTokenProps({ token })} />
-                ))}
-              </div>
-            ))}
-          </code>
-        </pre>
-      )}
-    </Highlight>
-  );
-}
-
 function formatMessage(text: string, currentUsername: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let lastIdx = 0;
@@ -125,7 +105,11 @@ function formatMessage(text: string, currentUsername: string): ReactNode[] {
   while ((m = FORMAT_RE.exec(text)) !== null) {
     if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
     if (m[2] !== undefined) {
-      nodes.push(<CodeBlock key={key++} lang={m[1]} code={m[2]} />);
+      nodes.push(
+        <Suspense key={key++} fallback={<pre className="chat-msg-codeblock"><code>{m[2]}</code></pre>}>
+          <CodeBlock lang={m[1]} code={m[2]} />
+        </Suspense>
+      );
     } else if (m[3] !== undefined) {
       nodes.push(<code key={key++} className="chat-msg-code">{m[3]}</code>);
     } else if (m[4] !== undefined) {
@@ -207,33 +191,42 @@ export function ChatPanel({
     return true;
   }
 
-  function startEdit(msg: ChatMessage) {
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  const editingIdRef = useRef(editingId);
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+  const editDraftRef = useRef(editDraft);
+  useEffect(() => { editDraftRef.current = editDraft; }, [editDraft]);
+
+  const startEdit = useCallback((msg: ChatMessage) => {
     setEditingId(msg.id);
     setEditDraft(msg.content);
-  }
+  }, []);
 
-  function cancelEdit() {
+  const cancelEdit = useCallback(() => {
     setEditingId(null);
     setEditDraft("");
-  }
+  }, []);
 
-  function commitEdit() {
-    if (!editingId) return;
-    const trimmed = editDraft.trim();
+  const commitEdit = useCallback(() => {
+    const id = editingIdRef.current;
+    if (!id) return;
+    const trimmed = editDraftRef.current.trim();
     if (!trimmed) return;
-    const original = messages.find((m) => m.id === editingId);
+    const original = messagesRef.current.find((m) => m.id === id);
     if (original && trimmed !== original.content) {
-      send({ type: "edit", id: editingId, content: trimmed });
+      send({ type: "edit", id, content: trimmed });
     }
-    cancelEdit();
-  }
+    setEditingId(null);
+    setEditDraft("");
+  }, []);
 
-  function deleteMessage(id: string) {
+  const deleteMessage = useCallback((id: string) => {
     if (!window.confirm("Apagar esta mensagem?")) return;
     send({ type: "delete", id });
-  }
+  }, []);
 
-  async function togglePin(msg: ChatMessage) {
+  const togglePin = useCallback(async (msg: ChatMessage) => {
     try {
       await api.pinMessage(token, serverId, msg.id);
     } catch (err) {
@@ -242,7 +235,16 @@ export function ChatPanel({
         await api.unpinMessage(token, serverId, msg.id).catch(() => {});
       }
     }
-  }
+  }, [token, serverId]);
+
+  const reactToMessage = useCallback((id: string, emoji: string) => {
+    send({ type: "react", id, emoji });
+  }, []);
+
+  const replyToMessage = useCallback((msg: ChatMessage) => {
+    setReplyTo(msg);
+    inputRef.current?.focus();
+  }, []);
 
   function scheduleMarkRead() {
     if (markReadTimer.current) return;
@@ -256,14 +258,14 @@ export function ChatPanel({
     }, 1500);
   }
 
-  function scrollToMessage(id: string) {
+  const scrollToMessage = useCallback((id: string) => {
     const el = document.getElementById(`msg-${id}`);
     if (el) {
       el.scrollIntoView({ behavior: "smooth", block: "center" });
       el.classList.add("chat-msg-flash");
       setTimeout(() => el.classList.remove("chat-msg-flash"), 1500);
     }
-  }
+  }, []);
 
   useEffect(() => {
     setMessages([]);
@@ -586,6 +588,7 @@ export function ChatPanel({
           const grouped = shouldGroup(prev, msg);
           const showDate = i === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
           const isAuthor = msg.authorId === currentUserId;
+          const isThisEditing = editingId === msg.id;
           return (
             <Message
               key={msg.id}
@@ -595,19 +598,19 @@ export function ChatPanel({
               canEdit={isAuthor}
               canDelete={isAuthor || isOwner}
               canPin={isOwner}
-              isEditing={editingId === msg.id}
-              editDraft={editDraft}
+              isEditing={isThisEditing}
+              editDraft={isThisEditing ? editDraft : ""}
               currentUserId={currentUserId}
               currentUsername={currentUsername}
               token={token}
-              onStartEdit={() => startEdit(msg)}
+              onStartEdit={startEdit}
               onCancelEdit={cancelEdit}
               onCommitEdit={commitEdit}
               onChangeEdit={setEditDraft}
-              onDelete={() => deleteMessage(msg.id)}
-              onReact={(emoji) => send({ type: "react", id: msg.id, emoji })}
-              onReply={() => { setReplyTo(msg); inputRef.current?.focus(); }}
-              onPin={() => togglePin(msg)}
+              onDelete={deleteMessage}
+              onReact={reactToMessage}
+              onReply={replyToMessage}
+              onPin={togglePin}
               onJumpTo={scrollToMessage}
             />
           );
@@ -655,20 +658,15 @@ export function ChatPanel({
         })()}
         {showEmoji && (
           <div className="chat-emoji-popover">
-            <EmojiPicker
-              theme={Theme.DARK}
-              emojiStyle={EmojiStyle.NATIVE}
-              lazyLoadEmojis
-              skinTonesDisabled
-              searchPlaceholder="Buscar emoji..."
-              width="100%"
-              height={340}
-              onEmojiClick={(data) => {
-                setInput((v) => v + data.emoji);
-                setShowEmoji(false);
-                inputRef.current?.focus();
-              }}
-            />
+            <Suspense fallback={<div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>Carregando emojis…</div>}>
+              <EmojiPicker
+                onPick={(emoji) => {
+                  setInput((v) => v + emoji);
+                  setShowEmoji(false);
+                  inputRef.current?.focus();
+                }}
+              />
+            </Suspense>
           </div>
         )}
         <form className="chat-input-shell" onSubmit={sendForm}>
@@ -740,20 +738,20 @@ interface MessageProps {
   currentUserId: string;
   currentUsername: string;
   token: string;
-  onStartEdit: () => void;
+  onStartEdit: (msg: ChatMessage) => void;
   onCancelEdit: () => void;
   onCommitEdit: () => void;
   onChangeEdit: (v: string) => void;
-  onDelete: () => void;
-  onReact: (emoji: string) => void;
-  onReply: () => void;
-  onPin: () => void;
+  onDelete: (id: string) => void;
+  onReact: (id: string, emoji: string) => void;
+  onReply: (msg: ChatMessage) => void;
+  onPin: (msg: ChatMessage) => void;
   onJumpTo: (id: string) => void;
 }
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
 
-function Message({
+const Message = memo(function Message({
   msg,
   grouped,
   showDate,
@@ -883,7 +881,7 @@ function Message({
                     <button
                       key={e}
                       type="button"
-                      onClick={() => { onReact(e); setShowReactPicker(false); }}
+                      onClick={() => { onReact(msg.id, e); setShowReactPicker(false); }}
                     >
                       {e}
                     </button>
@@ -891,21 +889,21 @@ function Message({
                 </div>
               )}
             </div>
-            <button type="button" className="chat-msg-action-btn" title="Responder" onClick={onReply}>
+            <button type="button" className="chat-msg-action-btn" title="Responder" onClick={() => onReply(msg)}>
               <Ico.reply />
             </button>
             {canPin && (
-              <button type="button" className="chat-msg-action-btn" title="Fixar/desfixar" onClick={onPin}>
+              <button type="button" className="chat-msg-action-btn" title="Fixar/desfixar" onClick={() => onPin(msg)}>
                 <Ico.pin />
               </button>
             )}
             {canEdit && (
-              <button type="button" className="chat-msg-action-btn" title="Editar" onClick={onStartEdit}>
+              <button type="button" className="chat-msg-action-btn" title="Editar" onClick={() => onStartEdit(msg)}>
                 <Ico.edit />
               </button>
             )}
             {canDelete && (
-              <button type="button" className="chat-msg-action-btn danger" title="Apagar" onClick={onDelete}>
+              <button type="button" className="chat-msg-action-btn danger" title="Apagar" onClick={() => onDelete(msg.id)}>
                 <Ico.trash />
               </button>
             )}
@@ -919,7 +917,7 @@ function Message({
                 type="button"
                 className={`chat-reaction${r.userIds.includes(currentUserId) ? " active" : ""}`}
                 title={`${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                onClick={() => onReact(r.emoji)}
+                onClick={() => onReact(msg.id, r.emoji)}
               >
                 {r.emoji} <span>{r.count}</span>
               </button>
@@ -929,7 +927,7 @@ function Message({
       </div>
     </>
   );
-}
+});
 
 function TypingBar({ typers }: { typers: Record<string, string> }) {
   const names = Object.values(typers);
