@@ -67,6 +67,26 @@ function broadcast(serverId: string, payload: string, excludeUserId?: string) {
   });
 }
 
+function broadcastChannel(serverId: string, channelId: string | null, payload: string) {
+  rooms.get(serverId)?.forEach((conn) => {
+    if (conn.currentChannelId !== channelId) return;
+    if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(payload);
+  });
+}
+
+function broadcastMessage(serverId: string, msg: ChatMessage) {
+  const fullPayload = JSON.stringify({ type: "message", ...msg });
+  const bumpPayload = JSON.stringify({ type: "unread_bump", channelId: msg.channelId, authorId: msg.authorId });
+  rooms.get(serverId)?.forEach((conn) => {
+    if (conn.ws.readyState !== conn.ws.OPEN) return;
+    if (conn.currentChannelId === msg.channelId) {
+      conn.ws.send(fullPayload);
+    } else if (conn.userId !== msg.authorId) {
+      conn.ws.send(bumpPayload);
+    }
+  });
+}
+
 function broadcastTyping(serverId: string, userId: string, username: string, typing: boolean, channelId: string | null) {
   const payload = JSON.stringify({ type: "typing", userId, username, typing, channelId });
   rooms.get(serverId)?.forEach((conn) => {
@@ -325,13 +345,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               include: MESSAGE_INCLUDE,
             });
 
-            broadcast(
-              serverId,
-              JSON.stringify({
-                type: "message",
-                ...serialize(msg),
-              })
-            );
+            broadcastMessage(serverId, serialize(msg));
             return;
           }
 
@@ -358,7 +372,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               select: { emoji: true, userId: true },
             });
 
-            broadcast(serverId, JSON.stringify({
+            broadcastChannel(serverId, msg.channelId, JSON.stringify({
               type: "reactions",
               messageId: id,
               reactions: groupReactions(allReactions),
@@ -387,15 +401,12 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               data: { content, editedAt: new Date() },
             });
 
-            broadcast(
-              serverId,
-              JSON.stringify({
-                type: "edit",
-                id: updated.id,
-                content: updated.content,
-                editedAt: updated.editedAt!.toISOString(),
-              })
-            );
+            broadcastChannel(serverId, existing.channelId, JSON.stringify({
+              type: "edit",
+              id: updated.id,
+              content: updated.content,
+              editedAt: updated.editedAt!.toISOString(),
+            }));
             return;
           }
 
@@ -417,7 +428,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             }
 
             await prisma.message.delete({ where: { id } });
-            broadcast(serverId, JSON.stringify({ type: "delete", id }));
+            broadcastChannel(serverId, existing.channelId, JSON.stringify({ type: "delete", id }));
             return;
           }
         } catch {}

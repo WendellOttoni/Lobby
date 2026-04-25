@@ -834,6 +834,13 @@ a:hover { text-decoration: underline; }
   animation: pulse-soft 2s ease infinite;
 }
 
+.chat-scroll-wrap {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
 .chat-scroll {
   flex: 1;
   overflow-y: auto;
@@ -841,6 +848,25 @@ a:hover { text-decoration: underline; }
   flex-direction: column;
   padding-bottom: 4px;
 }
+.chat-new-msg-badge {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--purple);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.45);
+  white-space: nowrap;
+  transition: opacity 0.15s, transform 0.15s;
+  z-index: 10;
+}
+.chat-new-msg-badge:hover { opacity: 0.88; transform: translateX(-50%) translateY(-2px); }
 
 .chat-intro { padding: 36px 20px 16px; }
 .chat-intro-tile {

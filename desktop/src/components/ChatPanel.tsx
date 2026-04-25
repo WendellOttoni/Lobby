@@ -163,6 +163,8 @@ export function ChatPanel({
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [firstItemIndex, setFirstItemIndex] = useState(START_INDEX);
+  const [showNewMsgBadge, setShowNewMsgBadge] = useState(false);
+  const isAtBottomRef = useRef(true);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [members, setMembers] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -340,10 +342,17 @@ export function ChatPanel({
             setHasMore(incoming.length >= 80);
             setHistoryLoaded(true);
           }
+        } else if (data.type === "unread_bump") {
+          if (data.authorId !== currentUserId) {
+            onChannelMessageRef.current?.(data.channelId, data.authorId);
+          }
         } else if (data.type === "message") {
           const msg = data as ChatMessage & { type: string };
           if (msg.channelId === activeChannelId) {
             setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+            if (msg.authorId !== currentUserId && !isAtBottomRef.current) {
+              setShowNewMsgBadge(true);
+            }
           }
           if (msg.authorId !== currentUserId) {
             onChannelMessageRef.current?.(msg.channelId, msg.authorId);
@@ -401,6 +410,7 @@ export function ChatPanel({
     setTypers({});
     setHasMore(false);
     setLoadingMore(false);
+    setShowNewMsgBadge(false);
     if (markReadTimer.current) {
       clearTimeout(markReadTimer.current);
       markReadTimer.current = null;
@@ -573,6 +583,7 @@ export function ChatPanel({
           </div>
         </div>
       ) : (
+        <div className="chat-scroll-wrap">
         <Virtuoso
           ref={virtuosoRef}
           className="chat-scroll"
@@ -583,6 +594,10 @@ export function ChatPanel({
           followOutput="smooth"
           atBottomThreshold={120}
           increaseViewportBy={{ top: 400, bottom: 200 }}
+          atBottomStateChange={(atBottom) => {
+            isAtBottomRef.current = atBottom;
+            if (atBottom) setShowNewMsgBadge(false);
+          }}
           components={{
             Header: () =>
               loadingMore ? (
@@ -639,6 +654,18 @@ export function ChatPanel({
             );
           }}
         />
+        {showNewMsgBadge && (
+          <button
+            className="chat-new-msg-badge"
+            onClick={() => {
+              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "smooth" });
+              setShowNewMsgBadge(false);
+            }}
+          >
+            ↓ Nova mensagem
+          </button>
+        )}
+        </div>
       )}
 
       <TypingBar typers={typers} />
