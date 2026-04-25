@@ -6,6 +6,15 @@ use tauri::{
 };
 
 #[tauri::command]
+fn toggle_devtools(window: tauri::WebviewWindow) {
+    if window.is_devtools_open() {
+        window.close_devtools();
+    } else {
+        window.open_devtools();
+    }
+}
+
+#[tauri::command]
 fn detect_game() -> Option<String> {
     let known: HashMap<&str, &str> = [
         ("cs2.exe", "Counter-Strike 2"),
@@ -149,7 +158,7 @@ pub fn run() {
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![detect_game])
+        .invoke_handler(tauri::generate_handler![detect_game, toggle_devtools])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

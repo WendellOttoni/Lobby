@@ -184,6 +184,7 @@ export function ChatPanel({
   const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const prependAnchorRef = useRef<{ height: number; top: number } | null>(null);
 
   function autoResize() {
     const el = inputRef.current;
@@ -309,6 +310,8 @@ export function ChatPanel({
             setHasMore(incoming.length >= 80);
             setHistoryLoaded(true);
           } else if (data.prepend) {
+            const sc = scrollRef.current;
+            if (sc) prependAnchorRef.current = { height: sc.scrollHeight, top: sc.scrollTop };
             setMessages((prev) => mergeHistory(incoming, prev));
             setHasMore(incoming.length >= 40);
             setLoadingMore(false);
@@ -373,6 +376,13 @@ export function ChatPanel({
   }, [serverId, token, currentUserId, channelId]);
 
   useEffect(() => {
+    const anchor = prependAnchorRef.current;
+    if (anchor) {
+      const sc = scrollRef.current;
+      if (sc) sc.scrollTop = anchor.top + (sc.scrollHeight - anchor.height);
+      prependAnchorRef.current = null;
+      return;
+    }
     if (!loadingMore) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
@@ -419,13 +429,12 @@ export function ChatPanel({
 
   function notifyTyping() {
     if (!input.trim()) return;
+    if (typingTimerRef.current) return;
     send({ type: "typing", channelId });
-    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
     typingTimerRef.current = setTimeout(() => { typingTimerRef.current = null; }, 3000);
   }
 
-  function sendForm(e: FormEvent) {
-    e.preventDefault();
+  function submitMessage() {
     const trimmed = input.trim();
     if (!trimmed) return;
     const payload: Record<string, unknown> = { type: "message", content: trimmed, channelId };
@@ -435,6 +444,11 @@ export function ChatPanel({
       setReplyTo(null);
       inputRef.current?.focus();
     }
+  }
+
+  function sendForm(e: FormEvent) {
+    e.preventDefault();
+    submitMessage();
   }
 
   const hasContent = input.trim().length > 0;
@@ -653,14 +667,7 @@ export function ChatPanel({
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
-                const trimmed = input.trim();
-                if (!trimmed) return;
-                const payload: Record<string, unknown> = { type: "message", content: trimmed, channelId };
-                if (replyTo) payload.replyToId = replyTo.id;
-                if (send(payload)) {
-                  setInput("");
-                  setReplyTo(null);
-                }
+                submitMessage();
               }
             }}
             maxLength={2000}
@@ -916,13 +923,15 @@ function TypingBar({ typers }: { typers: Record<string, string> }) {
 
 function LinkPreview({ url, token }: { url: string; token: string }) {
   const [data, setData] = useState<{ title?: string; description?: string; image?: string; siteName?: string } | null>(null);
-  const [tried, setTried] = useState(false);
 
   useEffect(() => {
-    if (tried) return;
-    setTried(true);
-    api.unfurl(token, url).then(setData).catch(() => {});
-  }, [url, token, tried]);
+    let cancelled = false;
+    setData(null);
+    api.unfurl(token, url)
+      .then((res) => { if (!cancelled) setData(res); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [url, token]);
 
   if (!data || (!data.title && !data.image)) {
     return <a className="chat-msg-link" href={url} target="_blank" rel="noreferrer">{url}</a>;

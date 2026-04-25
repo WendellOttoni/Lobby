@@ -38,6 +38,7 @@ interface Connection {
   username: string;
   bucket: RateBucket;
   isAlive: boolean;
+  currentChannelId: string | null;
 }
 
 const RATE_CAPACITY = 5;
@@ -211,6 +212,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         username,
         bucket: { tokens: RATE_CAPACITY, lastRefill: Date.now() },
         isAlive: true,
+        currentChannelId: null,
       };
       rooms.get(serverId)!.add(conn);
 
@@ -219,7 +221,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       const history = await prisma.message.findMany({
-        where: { serverId },
+        where: { serverId, channelId: null },
         orderBy: { createdAt: "asc" },
         take: 80,
         include: MESSAGE_INCLUDE,
@@ -227,6 +229,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       socket.send(
         JSON.stringify({
           type: "history",
+          channelId: null,
           messages: history.map(serialize),
         })
       );
@@ -241,6 +244,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (data.type === "selectChannel") {
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            if (conn.currentChannelId !== channelId) {
+              stopTyping(serverId, userId, username, conn.currentChannelId);
+              conn.currentChannelId = channelId;
+            }
             const history = await prisma.message.findMany({
               where: { serverId, channelId },
               orderBy: { createdAt: "asc" },
@@ -414,7 +421,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       socket.on("close", () => {
-        stopTyping(serverId, userId, username, null);
+        stopTyping(serverId, userId, username, conn.currentChannelId);
         rooms.get(serverId)?.delete(conn);
         if (rooms.get(serverId)?.size === 0) rooms.delete(serverId);
       });
