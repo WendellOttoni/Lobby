@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager,
+    Manager, WebviewUrl, WebviewWindowBuilder,
 };
 
 #[tauri::command]
@@ -52,7 +52,6 @@ fn detect_game() -> Option<String> {
 
     let mut cmd = std::process::Command::new("tasklist");
     cmd.args(["/FO", "CSV", "/NH"]);
-    // Prevent a console window from flashing on screen when spawned from a GUI app
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -62,7 +61,6 @@ fn detect_game() -> Option<String> {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
-        // CSV format: "ImageName","PID","SessionName","Session#","MemUsage"
         if let Some(name) = line.split(',').next() {
             let exe = name.trim_matches('"');
             for (proc, game) in &known {
@@ -73,6 +71,78 @@ fn detect_game() -> Option<String> {
         }
     }
     None
+}
+
+// Prevent Windows from sleeping while in a voice call.
+// Uses raw WinAPI: ES_CONTINUOUS | ES_SYSTEM_REQUIRED to keep the thread awake,
+// and ES_CONTINUOUS alone to reset.
+#[tauri::command]
+fn set_keep_awake(enabled: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        const ES_CONTINUOUS: u32 = 0x80000000;
+        const ES_SYSTEM_REQUIRED: u32 = 0x00000001;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn SetThreadExecutionState(es_flags: u32) -> u32;
+        }
+
+        unsafe {
+            if enabled {
+                SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED);
+            } else {
+                SetThreadExecutionState(ES_CONTINUOUS);
+            }
+        }
+    }
+}
+
+#[tauri::command]
+async fn show_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        overlay.show().map_err(|e| e.to_string())?;
+        overlay.set_focus().map_err(|e| e.to_string())?;
+    } else {
+        let monitor = app
+            .primary_monitor()
+            .map_err(|e| e.to_string())?
+            .unwrap_or_else(|| {
+                app.available_monitors()
+                    .ok()
+                    .and_then(|m| m.into_iter().next())
+                    .unwrap()
+            });
+
+        let scale = monitor.scale_factor();
+        let screen_width = (monitor.size().width as f64 / scale) as i32;
+
+        WebviewWindowBuilder::new(
+            &app,
+            "overlay",
+            WebviewUrl::App("overlay".into()),
+        )
+        .title("Lobby Overlay")
+        .inner_size(200.0, 300.0)
+        .position((screen_width - 220) as f64, 80.0)
+        .always_on_top(true)
+        .decorations(false)
+        .transparent(true)
+        .skip_taskbar(true)
+        .resizable(false)
+        .visible(true)
+        .build()
+        .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn hide_overlay(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(overlay) = app.get_webview_window("overlay") {
+        overlay.hide().map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -90,7 +160,10 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
-        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec![])))
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![]),
+        ))
         .setup(|app| {
             let show = MenuItem::with_id(app, "show", "Abrir", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Sair", true, None::<&str>)?;
@@ -154,11 +227,21 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                // Overlay can be truly closed; main window hides to tray
+                if window.label() == "overlay" {
+                    return;
+                }
                 let _ = window.hide();
                 api.prevent_close();
             }
         })
-        .invoke_handler(tauri::generate_handler![detect_game, toggle_devtools])
+        .invoke_handler(tauri::generate_handler![
+            detect_game,
+            toggle_devtools,
+            set_keep_awake,
+            show_overlay,
+            hide_overlay,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

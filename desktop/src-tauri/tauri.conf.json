@@ -12,12 +12,16 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Lobby",
         "width": 900,
         "height": 700,
         "minWidth": 500,
         "minHeight": 400,
-        "skipTaskbar": false
+        "skipTaskbar": false,
+        "decorations": false,
+        "transparent": false,
+        "shadow": true
       }
     ],
     "security": {

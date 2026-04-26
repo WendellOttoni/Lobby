@@ -1,4 +1,6 @@
 :root {
+  --titlebar-h: 32px;
+
   /* surfaces — warm dark, not cold gray */
   --bg:            #0e0b14;
   --bg-2:          #120f1a;
@@ -41,6 +43,8 @@ html, body, #root {
   width: 100%;
   font-family: var(--font);
   background: var(--bg);
+  display: flex;
+  flex-direction: column;
   color: var(--text);
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
@@ -140,8 +144,78 @@ a:hover { text-decoration: underline; }
    ============================================ */
 .app-layout {
   display: flex;
-  height: 100vh;
+  height: calc(100vh - var(--titlebar-h));
   overflow: hidden;
+}
+
+/* ============================================
+   Custom title bar (frameless window)
+   ============================================ */
+.titlebar {
+  height: var(--titlebar-h);
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 12px;
+  -webkit-app-region: drag;
+}
+.titlebar-logo {
+  font-size: 11px;
+  color: var(--accent);
+  line-height: 1;
+}
+.titlebar-app {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: 0.02em;
+}
+.titlebar-sep {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.titlebar-sub {
+  font-size: 11px;
+  color: var(--accent);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+.titlebar-btn {
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+.titlebar-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+.titlebar-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
 }
 .app-main { flex: 1; display: flex; min-width: 0; overflow: hidden; }
 .server-page { flex: 1; display: flex; min-width: 0; overflow: hidden; }
@@ -2834,4 +2908,116 @@ a:hover { text-decoration: underline; }
 }
 .incoming-call-btn.decline:hover {
   background: #c0392b;
+}
+
+/* ============================================
+   Voice overlay window
+   ============================================ */
+.overlay-root {
+  background: rgba(10, 8, 18, 0.88);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  cursor: default;
+  user-select: none;
+}
+.overlay-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  -webkit-app-region: drag;
+}
+.overlay-room {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  -webkit-app-region: drag;
+}
+.overlay-close {
+  width: 18px;
+  height: 18px;
+  background: transparent;
+  border: none;
+  color: rgba(255,255,255,0.3);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  -webkit-app-region: no-drag;
+}
+.overlay-close:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+.overlay-participants {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.overlay-participant {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 4px;
+  border-radius: 6px;
+  transition: background 0.15s;
+}
+.overlay-participant.speaking {
+  background: rgba(34, 211, 238, 0.08);
+}
+.overlay-participant.muted {
+  opacity: 0.5;
+}
+.overlay-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  position: relative;
+  flex-shrink: 0;
+}
+.overlay-speak-ring {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent, #22d3ee);
+  animation: pulse-ring 1s ease-out infinite;
+}
+@keyframes pulse-ring {
+  0% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.35); }
+}
+.overlay-name {
+  font-size: 12px;
+  color: rgba(255,255,255,0.85);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.overlay-you {
+  color: rgba(255,255,255,0.35);
+  font-size: 10px;
+}
+.overlay-mute-icon {
+  color: rgba(255,100,100,0.7);
+  flex-shrink: 0;
 }

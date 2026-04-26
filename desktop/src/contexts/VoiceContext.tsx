@@ -14,6 +14,8 @@ import {
 } from "livekit-client";
 import { notify } from "../lib/notify";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { api } from "../lib/api";
 
 export interface VoiceParticipant {
@@ -239,6 +241,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     });
     setParticipants(list);
     setLocalQuality(room.localParticipant.connectionQuality);
+    emit("voice:update", { participants: list, roomName: room.name }).catch(() => {});
   }
 
   function resetState() {
@@ -255,6 +258,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setSelectedDevice("");
     userWantsMutedRef.current = false;
     pttActiveRef.current = false;
+    invoke("set_keep_awake", { enabled: false }).catch(() => {});
+    invoke("hide_overlay").catch(() => {});
+    emit("voice:update", { participants: [], roomName: null }).catch(() => {});
   }
 
   async function connect(authToken: string, serverId: string, roomId: string, roomName: string, isReconnectAttempt = false) {
@@ -396,6 +402,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         setSelectedDevice(active ?? devices[0]?.deviceId ?? "");
       }
       snapshotRoom(room);
+      invoke("set_keep_awake", { enabled: true }).catch(() => {});
+      invoke("show_overlay").catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao conectar na sala");
       resetState();
@@ -648,6 +656,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
       setAudioDevices(devices);
       snapshotRoom(room);
+      invoke("set_keep_awake", { enabled: true }).catch(() => {});
+      invoke("show_overlay").catch(() => {});
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao conectar na chamada");
       resetState();

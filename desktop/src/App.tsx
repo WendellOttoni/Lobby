@@ -1,10 +1,11 @@
 import { Suspense, lazy } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
-import { VoiceProvider } from "./contexts/VoiceContext";
+import { VoiceProvider, useVoice } from "./contexts/VoiceContext";
 import { DMProvider } from "./contexts/DMContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ProtectedRoute } from "./components/ProtectedRoute";
+import { TitleBar } from "./components/TitleBar";
 import "./App.css";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default: m.LoginPage })));
@@ -14,6 +15,7 @@ const ServerPage = lazy(() => import("./pages/ServerPage").then((m) => ({ defaul
 const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 const FriendsPage = lazy(() => import("./pages/FriendsPage").then((m) => ({ default: m.FriendsPage })));
 const DMPage = lazy(() => import("./pages/DMPage").then((m) => ({ default: m.DMPage })));
+const OverlayPage = lazy(() => import("./pages/OverlayPage").then((m) => ({ default: m.OverlayPage })));
 
 function RouteFallback() {
   return (
@@ -33,14 +35,24 @@ function AppShell() {
   );
 }
 
+function AppTitleBar() {
+  const { activeRoomName } = useVoice();
+  const location = useLocation();
+  const isOverlay = location.pathname === "/overlay";
+  if (isOverlay) return null;
+  return <TitleBar subtitle={activeRoomName} />;
+}
+
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
         <VoiceProvider>
           <BrowserRouter>
+            <AppTitleBar />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
+                <Route path="/overlay" element={<OverlayPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route element={<AppShell />}>
