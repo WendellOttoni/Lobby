@@ -575,6 +575,23 @@ a:hover { text-decoration: underline; }
 .channel-row:hover .channel-row-delete { opacity: 1; }
 .channel-row-delete:hover { background: rgba(251, 113, 133, 0.15); color: var(--danger); }
 
+.channel-row-menu-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.channel-row:hover .channel-row-menu-btn { opacity: 1; color: var(--text); }
+.channel-row-menu-btn:hover { background: rgba(255,255,255,0.1); }
+
 .channel-row-voice-count {
   font-size: 10.5px;
   color: var(--text-muted);
@@ -1026,7 +1043,6 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: 5px;
   margin-top: 5px;
-  padding-left: 50px;
 }
 .chat-reaction {
   display: inline-flex;

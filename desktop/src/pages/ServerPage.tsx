@@ -489,6 +489,18 @@ export function ServerPage() {
           {showBadge && !isEditing && (
             <span className="channel-row-unread">{unread > 99 ? "99+" : unread}</span>
           )}
+          {isOwner && !isEditing && (
+            <button
+              className="channel-row-menu-btn"
+              title="Opções do canal"
+              onClick={(e) => {
+                e.stopPropagation();
+                setItemMenu({ type: "channel", id: c.id, x: e.clientX, y: e.clientY });
+              }}
+            >
+              ⋯
+            </button>
+          )}
         </div>
       </div>
     );
@@ -543,6 +555,18 @@ export function ServerPage() {
             ) : (
               <span className="channel-row-join">Entrar</span>
             )
+          )}
+          {isOwner && !isEditing && (
+            <button
+              className="channel-row-menu-btn"
+              title="Opções da sala"
+              onClick={(e) => {
+                e.stopPropagation();
+                setItemMenu({ type: "room", id: room.id, x: e.clientX, y: e.clientY });
+              }}
+            >
+              ⋯
+            </button>
           )}
         </div>
 

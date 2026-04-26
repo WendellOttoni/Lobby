@@ -949,6 +949,21 @@ const Message = memo(function Message({
               )}
             </>
           )}
+          {msg.reactions.length > 0 && (
+            <div className="chat-msg-reactions">
+              {msg.reactions.map((r) => (
+                <button
+                  key={r.emoji}
+                  type="button"
+                  className={`chat-reaction${r.userIds.includes(currentUserId) ? " active" : ""}`}
+                  title={`${r.count} ${r.count === 1 ? "reação" : "reações"}`}
+                  onClick={() => onReact(msg.id, r.emoji)}
+                >
+                  {r.emoji} <span>{r.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
         {!isEditing && (
           <div className="chat-msg-actions">
@@ -993,21 +1008,6 @@ const Message = memo(function Message({
                 <Ico.trash />
               </button>
             )}
-          </div>
-        )}
-        {msg.reactions.length > 0 && (
-          <div className="chat-msg-reactions">
-            {msg.reactions.map((r) => (
-              <button
-                key={r.emoji}
-                type="button"
-                className={`chat-reaction${r.userIds.includes(currentUserId) ? " active" : ""}`}
-                title={`${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                onClick={() => onReact(msg.id, r.emoji)}
-              >
-                {r.emoji} <span>{r.count}</span>
-              </button>
-            ))}
           </div>
         )}
       </div>
