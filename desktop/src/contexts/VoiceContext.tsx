@@ -11,6 +11,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  VideoQuality,
   createLocalAudioTrack,
 } from "livekit-client";
 import { notify } from "../lib/notify";
@@ -62,12 +63,18 @@ interface VoiceContextValue {
   autoGainControl: boolean;
   isScreenSharing: boolean;
   screenShareStreams: Record<string, MediaStream>;
+  pausedStreams: Set<string>;
+  mainStreamIdentity: string | null;
+  streamQualities: Record<string, "high" | "medium" | "low">;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   connectDM: (lkToken: string, url: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
+  toggleStreamPaused: (identity: string) => void;
+  setStreamQuality: (identity: string, quality: "high" | "medium" | "low") => void;
+  setMainStream: (identity: string) => void;
   changeDevice: (deviceId: string) => Promise<void>;
   setVolumeAll: (v: number) => void;
   setNickname: (identity: string, name: string) => void;
@@ -179,6 +186,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [autoGainControl, setAutoGainControlState] = useState<boolean>(() => loadBool(AUTO_GAIN_KEY, true));
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareStreams, setScreenShareStreams] = useState<Record<string, MediaStream>>({});
+  const [pausedStreams, setPausedStreams] = useState<Set<string>>(new Set());
+  const [mainStreamIdentity, setMainStreamIdentity] = useState<string | null>(null);
+  const [streamQualities, setStreamQualities] = useState<Record<string, "high" | "medium" | "low">>({});
+  const screenSharePubsRef = useRef<Map<string, RemoteTrackPublication>>(new Map());
   const noiseRef = useRef(noiseSuppression);
   const echoRef = useRef(echoCancellation);
   const gainRef = useRef(autoGainControl);
@@ -264,6 +275,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setSelectedDevice("");
     setIsScreenSharing(false);
     setScreenShareStreams({});
+    setPausedStreams(new Set());
+    setMainStreamIdentity(null);
+    setStreamQualities({});
+    screenSharePubsRef.current.clear();
     userWantsMutedRef.current = false;
     pttActiveRef.current = false;
     invoke("set_keep_awake", { enabled: false }).catch(() => {});
@@ -313,7 +328,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           applyVolumeTo(participant);
         } else if (track.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
           const stream = track.mediaStream ?? new MediaStream([track.mediaStreamTrack]);
+          screenSharePubsRef.current.set(participant.identity, pub);
           setScreenShareStreams((prev) => ({ ...prev, [participant.identity]: stream }));
+          setMainStreamIdentity((prev) => prev ?? participant.identity);
         }
         snapshotRoom(room);
       })
@@ -321,11 +338,15 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         if (track.kind === Track.Kind.Audio) {
           track.detach().forEach((el) => el.remove());
         } else if (track.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          const id = participant.identity;
+          screenSharePubsRef.current.delete(id);
           setScreenShareStreams((prev) => {
             const next = { ...prev };
-            delete next[participant.identity];
+            delete next[id];
             return next;
           });
+          setPausedStreams((prev) => { const s = new Set(prev); s.delete(id); return s; });
+          setMainStreamIdentity((prev) => (prev === id ? null : prev));
         }
         snapshotRoom(room);
       })
@@ -342,8 +363,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         if (pub.track?.kind === Track.Kind.Audio) {
           setLocalMicTrack((pub.track as LocalAudioTrack).mediaStreamTrack);
         } else if (pub.source === Track.Source.ScreenShare && pub.track) {
+          const localId = room.localParticipant.identity;
           const stream = pub.track.mediaStream ?? new MediaStream([pub.track.mediaStreamTrack]);
-          setScreenShareStreams((prev) => ({ ...prev, [room.localParticipant.identity]: stream }));
+          setScreenShareStreams((prev) => ({ ...prev, [localId]: stream }));
+          setMainStreamIdentity((prev) => prev ?? localId);
           setIsScreenSharing(true);
         }
         snapshotRoom(room);
@@ -352,12 +375,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         if (pub.track?.kind === Track.Kind.Audio) {
           setLocalMicTrack(null);
         } else if (pub.source === Track.Source.ScreenShare) {
+          const localId = room.localParticipant.identity;
           setIsScreenSharing(false);
-          setScreenShareStreams((prev) => {
-            const next = { ...prev };
-            delete next[room.localParticipant.identity];
-            return next;
-          });
+          setScreenShareStreams((prev) => { const n = { ...prev }; delete n[localId]; return n; });
+          setMainStreamIdentity((prev) => (prev === localId ? null : prev));
         }
         snapshotRoom(room);
       })
@@ -487,6 +508,34 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     } catch {
       // User cancelled or permission denied
     }
+  }
+
+  const QUALITY_MAP = {
+    high: VideoQuality.HIGH,
+    medium: VideoQuality.MEDIUM,
+    low: VideoQuality.LOW,
+  } as const;
+
+  function toggleStreamPaused(identity: string) {
+    const pub = screenSharePubsRef.current.get(identity);
+    if (!pub) return;
+    const next = !pub.isEnabled;
+    try { pub.setEnabled(next); } catch {}
+    setPausedStreams((prev) => {
+      const s = new Set(prev);
+      next ? s.delete(identity) : s.add(identity);
+      return s;
+    });
+  }
+
+  function setStreamQuality(identity: string, quality: "high" | "medium" | "low") {
+    const pub = screenSharePubsRef.current.get(identity);
+    try { if (pub) pub.setVideoQuality(QUALITY_MAP[quality]); } catch {}
+    setStreamQualities((prev) => ({ ...prev, [identity]: quality }));
+  }
+
+  function setMainStream(identity: string) {
+    setMainStreamIdentity(identity);
   }
 
   useEffect(() => {
@@ -729,8 +778,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       volume, audioDevices, selectedDevice, localMicTrack, error,
       nicknames, userVolumes, pttKey, muteKey, deafenKey,
       localQuality, rtt, noiseSuppression, echoCancellation, autoGainControl,
-      isScreenSharing, screenShareStreams,
-      connect, connectDM, disconnect, toggleMute, toggleDeafen, toggleScreenShare, changeDevice, setVolumeAll,
+      isScreenSharing, screenShareStreams, pausedStreams, mainStreamIdentity, streamQualities,
+      connect, connectDM, disconnect, toggleMute, toggleDeafen, toggleScreenShare,
+      toggleStreamPaused, setStreamQuality, setMainStream, changeDevice, setVolumeAll,
       setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
       setNoiseSuppression, setEchoCancellation, setAutoGainControl, loadAudioDevices,
     }}>

@@ -37,6 +37,12 @@ export function ServerPage() {
   const navigate = useNavigate();
   const { user, token } = useAuth();
   const voice = useVoice();
+  const screenShareCount = Object.keys(voice.screenShareStreams).length;
+
+  useEffect(() => {
+    if (screenShareCount > 0) setActiveView("screenshare");
+    else setActiveView("chat");
+  }, [screenShareCount > 0]);
 
   const [server, setServer] = useState<Server | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -75,6 +81,7 @@ export function ServerPage() {
     y: number;
   } | null>(null);
   const [itemMenu, setItemMenu] = useState<ItemMenuState | null>(null);
+  const [activeView, setActiveView] = useState<"chat" | "screenshare">("chat");
 
   const isOwner = server?.ownerId === user?.id;
   const searchRef = useRef<HTMLInputElement>(null);
@@ -906,11 +913,30 @@ export function ServerPage() {
         {voice.activeRoomName && <VoiceBar />}
       </div>
 
-      {/* ── Screen share ── */}
-      <ScreenShareView />
+      {/* ── View toggle tab bar ── */}
+      {screenShareCount > 0 && (
+        <div className="server-view-tabs">
+          <button
+            className={`server-view-tab${activeView === "chat" ? " active" : ""}`}
+            onClick={() => setActiveView("chat")}
+          >
+            Chat
+          </button>
+          <button
+            className={`server-view-tab${activeView === "screenshare" ? " active" : ""}`}
+            onClick={() => setActiveView("screenshare")}
+          >
+            Transmissões
+            <span className="server-view-tab-badge">{screenShareCount}</span>
+          </button>
+        </div>
+      )}
+
+      {/* ── Screen share panel ── */}
+      {activeView === "screenshare" && screenShareCount > 0 && <ScreenShareView />}
 
       {/* ── Chat ── */}
-      {token && user && serverId && (
+      {activeView === "chat" && token && user && serverId && (
         <ChatPanel
           serverId={serverId}
           token={token}
