@@ -6,7 +6,6 @@ import { useVoice } from "../contexts/VoiceContext";
 import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
-import { SettingsModal } from "../components/SettingsModal";
 import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServersLayout() {
@@ -17,7 +16,6 @@ export function ServersLayout() {
   const [servers, setServers] = useState<Server[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [modalInitialCode, setModalInitialCode] = useState<string | undefined>();
-  const [showSettings, setShowSettings] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   async function loadServers() {
@@ -48,6 +46,17 @@ export function ServersLayout() {
       prev.map((s) => (s.id === serverId ? { ...s, unreadCount: 0 } : s))
     );
   }, [token, serverId]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
+        e.preventDefault();
+        navigate("/settings");
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [navigate]);
 
   // Handle deep links: lobby://join/INVITE_CODE
   useEffect(() => {
@@ -92,7 +101,7 @@ export function ServersLayout() {
         onAdd={() => { setModalInitialCode(undefined); setShowModal(true); }}
         user={user}
         onLogout={logout}
-        onSettings={() => setShowSettings(true)}
+        onSettings={() => navigate("/settings")}
       />
 
       <div className="app-main">
@@ -116,9 +125,6 @@ export function ServersLayout() {
         />
       )}
 
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
     </div>
   );
 }

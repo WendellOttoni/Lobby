@@ -10,6 +10,7 @@ const LoginPage = lazy(() => import("./pages/LoginPage").then((m) => ({ default:
 const RegisterPage = lazy(() => import("./pages/RegisterPage").then((m) => ({ default: m.RegisterPage })));
 const ServersLayout = lazy(() => import("./pages/ServersLayout").then((m) => ({ default: m.ServersLayout })));
 const ServerPage = lazy(() => import("./pages/ServerPage").then((m) => ({ default: m.ServerPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage").then((m) => ({ default: m.SettingsPage })));
 
 function RouteFallback() {
   return (
@@ -39,6 +40,7 @@ function App() {
                 >
                   <Route path=":serverId" element={<ServerPage />} />
                 </Route>
+                <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/servers" replace />} />
               </Routes>
             </Suspense>

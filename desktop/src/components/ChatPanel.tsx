@@ -2,7 +2,7 @@ import { FormEvent, ReactNode, Suspense, lazy, memo, useCallback, useEffect, use
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
-import { notify } from "../lib/notify";
+import { notify, isMentionNotifyEnabled } from "../lib/notify";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
 
@@ -361,7 +361,7 @@ export function ChatPanel({
               scheduleMarkRead();
               const mentioned = msg.content.includes(`@${currentUsernameRef.current}`);
               if (document.hidden || mentioned) playMessageSound();
-              if (mentioned && document.hidden) {
+              if (mentioned && document.hidden && isMentionNotifyEnabled()) {
                 notify(
                   `Nova menção — #${channelIdRef.current ?? "geral"}`,
                   `${msg.authorName}: ${msg.content.slice(0, 80)}`
