@@ -84,6 +84,15 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface SearchResult {
+  id: string;
+  content: string;
+  createdAt: string;
+  authorId: string;
+  authorName: string;
+  channelId: string | null;
+}
+
 export interface LivekitTokenResponse {
   token: string;
   url: string;
@@ -107,7 +116,6 @@ async function request<T>(
     headers: {
       ...(body ? { "Content-Type": "application/json" } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      "ngrok-skip-browser-warning": "true",
       ...headers,
     },
   });
@@ -309,7 +317,7 @@ export const api = {
     }),
 
   searchMessages: (token: string, serverId: string, q: string) =>
-    request<{ results: Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string; channelId: string | null }> }>(
+    request<{ results: SearchResult[] }>(
       `/servers/${serverId}/messages/search?q=${encodeURIComponent(q)}`,
       { token }
     ),

@@ -1,38 +1,18 @@
-import { FormEvent, ReactNode, Suspense, lazy, memo, useCallback, useEffect, useRef, useState } from "react";
+import { FormEvent, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
-import { api } from "../lib/api";
+import { api, SearchResult } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
 import { notify, isMentionNotifyEnabled } from "../lib/notify";
-import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
+import {
+  ChatMessage,
+  Message,
+  TypingBar,
+  sameCalendarDay,
+  shouldGroup,
+} from "./MessageItem";
 
 const EmojiPicker = lazy(() => import("./LazyEmojiPicker"));
-const CodeBlock = lazy(() => import("./LazyCodeBlock"));
-
-interface ReactionCount {
-  emoji: string;
-  count: number;
-  userIds: string[];
-}
-
-interface ReplySnippet {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-}
-
-interface ChatMessage {
-  id: string;
-  content: string;
-  createdAt: string;
-  editedAt?: string | null;
-  authorId: string;
-  authorName: string;
-  channelId: string | null;
-  replyTo: ReplySnippet | null;
-  reactions: ReactionCount[];
-}
 
 interface Props {
   serverId: string;
@@ -49,89 +29,10 @@ interface Props {
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
+const START_INDEX = 100_000;
 
 function wsUrl(): string {
   return API_URL.replace(/^https:\/\//, "wss://").replace(/^http:\/\//, "ws://");
-}
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
-}
-
-function sameCalendarDay(a: string, b: string): boolean {
-  const da = new Date(a);
-  const db = new Date(b);
-  return (
-    da.getFullYear() === db.getFullYear() &&
-    da.getMonth() === db.getMonth() &&
-    da.getDate() === db.getDate()
-  );
-}
-
-const URL_RE = /\bhttps?:\/\/[^\s<>"']+/gi;
-const IMG_EXT_RE = /\.(png|jpe?g|gif|webp|avif)(\?[^\s]*)?$/i;
-const MEDIA_HOSTS = /(tenor\.com|giphy\.com|media\.tenor\.com|media\.giphy\.com|media[0-9]?\.giphy\.com|imgur\.com|i\.imgur\.com)/i;
-
-function extractMedia(content: string): { url: string; isTenorEmbed: boolean } | null {
-  const matches = content.match(URL_RE);
-  if (!matches) return null;
-  for (const raw of matches) {
-    const url = raw.replace(/[),.;!?]+$/, "");
-    if (IMG_EXT_RE.test(url)) return { url, isTenorEmbed: false };
-    if (MEDIA_HOSTS.test(url)) return { url, isTenorEmbed: true };
-  }
-  return null;
-}
-
-function shouldGroup(prev: ChatMessage | undefined, curr: ChatMessage): boolean {
-  if (!prev || prev.authorId !== curr.authorId) return false;
-  if (!sameCalendarDay(prev.createdAt, curr.createdAt)) return false;
-  if (curr.replyTo) return false;
-  return new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60 * 1000;
-}
-
-const FORMAT_RE = /```(?:(\w+)\n)?([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
-
-const START_INDEX = 100_000;
-
-function formatMessage(text: string, currentUsername: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let lastIdx = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  FORMAT_RE.lastIndex = 0;
-  while ((m = FORMAT_RE.exec(text)) !== null) {
-    if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
-    if (m[2] !== undefined) {
-      nodes.push(
-        <Suspense key={key++} fallback={<pre className="chat-msg-codeblock"><code>{m[2]}</code></pre>}>
-          <CodeBlock lang={m[1]} code={m[2]} />
-        </Suspense>
-      );
-    } else if (m[3] !== undefined) {
-      nodes.push(<code key={key++} className="chat-msg-code">{m[3]}</code>);
-    } else if (m[4] !== undefined) {
-      nodes.push(<strong key={key++}>{m[4]}</strong>);
-    } else if (m[5] !== undefined) {
-      nodes.push(<em key={key++}>{m[5]}</em>);
-    } else if (m[6] !== undefined) {
-      const isSelf = m[6].slice(1).toLowerCase() === currentUsername.toLowerCase();
-      nodes.push(
-        <span key={key++} className={`chat-mention${isSelf ? " self" : ""}`}>
-          {m[6]}
-        </span>
-      );
-    }
-    lastIdx = m.index + m[0].length;
-  }
-  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
-  return nodes;
 }
 
 export function ChatPanel({
@@ -153,6 +54,7 @@ export function ChatPanel({
   useEffect(() => { channelIdRef.current = channelId; }, [channelId]);
   const currentUsernameRef = useRef(currentUsername);
   useEffect(() => { currentUsernameRef.current = currentUsername; }, [currentUsername]);
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [input, setInput] = useState("");
@@ -165,20 +67,28 @@ export function ChatPanel({
   const [loadingMore, setLoadingMore] = useState(false);
   const [firstItemIndex, setFirstItemIndex] = useState(START_INDEX);
   const [showNewMsgBadge, setShowNewMsgBadge] = useState(false);
-  const isAtBottomRef = useRef(true);
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const [members, setMembers] = useState<string[]>([]);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string; channelId: string | null }> | null>(null);
+  const [searchResults, setSearchResults] = useState<SearchResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+
+  const isAtBottomRef = useRef(true);
+  const virtuosoRef = useRef<VirtuosoHandle>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messagesRef = useRef(messages);
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  const editingIdRef = useRef(editingId);
+  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
+  const editDraftRef = useRef(editDraft);
+  useEffect(() => { editDraftRef.current = editDraft; }, [editDraft]);
 
   function autoResize() {
     const el = inputRef.current;
@@ -186,9 +96,7 @@ export function ChatPanel({
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 160) + "px";
   }
-
   useEffect(() => { autoResize(); }, [input]);
-  const markReadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function send(payload: object): boolean {
     const ws = wsRef.current;
@@ -196,13 +104,6 @@ export function ChatPanel({
     ws.send(JSON.stringify(payload));
     return true;
   }
-
-  const messagesRef = useRef(messages);
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-  const editingIdRef = useRef(editingId);
-  useEffect(() => { editingIdRef.current = editingId; }, [editingId]);
-  const editDraftRef = useRef(editDraft);
-  useEffect(() => { editDraftRef.current = editDraft; }, [editDraft]);
 
   const startEdit = useCallback((msg: ChatMessage) => {
     setEditingId(msg.id);
@@ -220,9 +121,7 @@ export function ChatPanel({
     const trimmed = editDraftRef.current.trim();
     if (!trimmed) return;
     const original = messagesRef.current.find((m) => m.id === id);
-    if (original && trimmed !== original.content) {
-      send({ type: "edit", id, content: trimmed });
-    }
+    if (original && trimmed !== original.content) send({ type: "edit", id, content: trimmed });
     setEditingId(null);
     setEditDraft("");
   }, []);
@@ -237,9 +136,7 @@ export function ChatPanel({
       await api.pinMessage(token, serverId, msg.id);
     } catch (err) {
       const apiErr = err as { status?: number };
-      if (apiErr?.status === 409) {
-        await api.unpinMessage(token, serverId, msg.id).catch(() => {});
-      }
+      if (apiErr?.status === 409) await api.unpinMessage(token, serverId, msg.id).catch(() => {});
     }
   }, [token, serverId]);
 
@@ -282,6 +179,7 @@ export function ChatPanel({
     }, 350);
   }, [firstItemIndex]);
 
+  // WebSocket connection (reconnects on serverId/token change)
   useEffect(() => {
     setMessages([]);
     setHistoryLoaded(false);
@@ -324,6 +222,7 @@ export function ChatPanel({
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         const activeChannelId = channelIdRef.current;
+
         if (data.type === "history") {
           const incoming: ChatMessage[] = data.messages;
           const targetChannelId = "channelId" in data ? data.channelId : null;
@@ -372,9 +271,7 @@ export function ChatPanel({
           }
         } else if (data.type === "edit") {
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m
-            )
+            prev.map((m) => m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m)
           );
         } else if (data.type === "delete") {
           setMessages((prev) => prev.filter((m) => m.id !== data.id));
@@ -382,9 +279,7 @@ export function ChatPanel({
           setReplyTo((r) => (r?.id === data.id ? null : r));
         } else if (data.type === "reactions") {
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === data.messageId ? { ...m, reactions: data.reactions } : m
-            )
+            prev.map((m) => m.id === data.messageId ? { ...m, reactions: data.reactions } : m)
           );
         } else if (data.type === "typing") {
           if (data.channelId !== activeChannelId) return;
@@ -411,6 +306,7 @@ export function ChatPanel({
     };
   }, [serverId, token, currentUserId]);
 
+  // Channel switch: send selectChannel over existing WS
   useEffect(() => {
     setMessages([]);
     setHistoryLoaded(false);
@@ -428,6 +324,7 @@ export function ChatPanel({
     }
   }, [channelId]);
 
+  // Load member list for @mention autocomplete
   useEffect(() => {
     let cancelled = false;
     api.listMembers(token, serverId)
@@ -436,6 +333,7 @@ export function ChatPanel({
     return () => { cancelled = true; };
   }, [serverId, token]);
 
+  // Keyboard shortcuts
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.ctrlKey || e.metaKey) && e.key === "f") {
@@ -469,15 +367,13 @@ export function ChatPanel({
     if (loadingMore || !hasMore) return;
     const channelMessages = messages.filter((m) => m.channelId === channelId);
     if (channelMessages.length === 0) return;
-    const firstId = channelMessages[0].id;
-    if (send({ type: "loadMore", before: firstId, channelId })) {
+    if (send({ type: "loadMore", before: channelMessages[0].id, channelId })) {
       setLoadingMore(true);
     }
   }
 
   function notifyTyping() {
-    if (!input.trim()) return;
-    if (typingTimerRef.current) return;
+    if (!input.trim() || typingTimerRef.current) return;
     send({ type: "typing", channelId });
     typingTimerRef.current = setTimeout(() => { typingTimerRef.current = null; }, 3000);
   }
@@ -523,7 +419,10 @@ export function ChatPanel({
           >
             ?
           </button>
-          <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); setShowSearchHelp(false); }}>
+          <button
+            type="button"
+            onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); setShowSearchHelp(false); }}
+          >
             <Ico.close />
           </button>
         </div>
@@ -552,7 +451,7 @@ export function ChatPanel({
                 title={sameChannel ? "Pular para esta mensagem" : "Em outro canal"}
               >
                 <span className="chat-search-result-author">{r.authorName}</span>
-                <span className="chat-search-result-time">{formatTime(r.createdAt)}</span>
+                <span className="chat-search-result-time">{new Date(r.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
                 {!sameChannel && <span className="chat-search-result-elsewhere">em outro canal</span>}
                 <p className="chat-search-result-content">{r.content}</p>
               </div>
@@ -560,6 +459,7 @@ export function ChatPanel({
           })}
         </div>
       )}
+
       <div className="chat-header">
         <div className="chat-header-tile">
           <Ico.hash />
@@ -603,15 +503,9 @@ export function ChatPanel({
       ) : visibleMessages.length === 0 ? (
         <div className="chat-scroll">
           <div className="chat-intro">
-            <div className="chat-intro-tile">
-              <Ico.hash />
-            </div>
-            <h2>
-              Bem-vindo ao <span className="brand-text">#{channelName}</span>
-            </h2>
-            <p>
-              Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
-            </p>
+            <div className="chat-intro-tile"><Ico.hash /></div>
+            <h2>Bem-vindo ao <span className="brand-text">#{channelName}</span></h2>
+            <p>Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.</p>
           </div>
           <div className="chat-empty">
             <p>Nenhuma mensagem ainda.</p>
@@ -620,107 +514,104 @@ export function ChatPanel({
         </div>
       ) : (
         <div className="chat-scroll-wrap">
-        <Virtuoso
-          ref={virtuosoRef}
-          className="chat-scroll"
-          data={visibleMessages}
-          firstItemIndex={firstItemIndex}
-          initialTopMostItemIndex={visibleMessages.length - 1}
-          startReached={loadMore}
-          followOutput="smooth"
-          atBottomThreshold={120}
-          increaseViewportBy={{ top: 400, bottom: 200 }}
-          atBottomStateChange={(atBottom) => {
-            isAtBottomRef.current = atBottom;
-            if (atBottom) setShowNewMsgBadge(false);
-          }}
-          components={{
-            Header: () =>
-              loadingMore ? (
-                <div className="chat-load-more-spinner">Carregando...</div>
-              ) : hasMore ? (
-                <button className="chat-load-more-btn" onClick={loadMore}>
-                  Carregar mensagens anteriores
-                </button>
-              ) : (
-                <div className="chat-intro">
-                  <div className="chat-intro-tile">
-                    <Ico.hash />
-                  </div>
-                  <h2>
-                    Bem-vindo ao <span className="brand-text">#{channelName}</span>
-                  </h2>
-                  <p>
-                    Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.
-                  </p>
-                </div>
-              ),
-            Footer: () => <div style={{ height: 12 }} />,
-          }}
-          itemContent={(absoluteIndex, msg) => {
-            const localIdx = absoluteIndex - firstItemIndex;
-            const prev = visibleMessages[localIdx - 1];
-            const grouped = shouldGroup(prev, msg);
-            const showDate = localIdx === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
-            const isAuthor = msg.authorId === currentUserId;
-            const isThisEditing = editingId === msg.id;
-            return (
-              <Message
-                msg={msg}
-                grouped={grouped}
-                showDate={showDate}
-                canEdit={isAuthor}
-                canDelete={isAuthor || isOwner}
-                canPin={isOwner}
-                isEditing={isThisEditing}
-                editDraft={isThisEditing ? editDraft : ""}
-                currentUserId={currentUserId}
-                currentUsername={currentUsername}
-                token={token}
-                onStartEdit={startEdit}
-                onCancelEdit={cancelEdit}
-                onCommitEdit={commitEdit}
-                onChangeEdit={setEditDraft}
-                onDelete={deleteMessage}
-                onReact={reactToMessage}
-                onReply={replyToMessage}
-                onPin={togglePin}
-                onJumpTo={scrollToMessage}
-              />
-            );
-          }}
-        />
-        {showNewMsgBadge && (
-          <button
-            className="chat-new-msg-badge"
-            onClick={() => {
-              virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "smooth" });
-              setShowNewMsgBadge(false);
+          <Virtuoso
+            ref={virtuosoRef}
+            className="chat-scroll"
+            data={visibleMessages}
+            firstItemIndex={firstItemIndex}
+            initialTopMostItemIndex={visibleMessages.length - 1}
+            startReached={loadMore}
+            followOutput="smooth"
+            atBottomThreshold={120}
+            increaseViewportBy={{ top: 400, bottom: 200 }}
+            atBottomStateChange={(atBottom) => {
+              isAtBottomRef.current = atBottom;
+              if (atBottom) setShowNewMsgBadge(false);
             }}
-          >
-            ↓ Nova mensagem
-          </button>
-        )}
+            components={{
+              Header: () =>
+                loadingMore ? (
+                  <div className="chat-load-more-spinner">Carregando...</div>
+                ) : hasMore ? (
+                  <button className="chat-load-more-btn" onClick={loadMore}>
+                    Carregar mensagens anteriores
+                  </button>
+                ) : (
+                  <div className="chat-intro">
+                    <div className="chat-intro-tile"><Ico.hash /></div>
+                    <h2>Bem-vindo ao <span className="brand-text">#{channelName}</span></h2>
+                    <p>Este é o começo do canal. Converse com quem tá por aqui, mande um convite de voz, ou abra uma sala.</p>
+                  </div>
+                ),
+              Footer: () => <div style={{ height: 12 }} />,
+            }}
+            itemContent={(absoluteIndex, msg) => {
+              const localIdx = absoluteIndex - firstItemIndex;
+              const prev = visibleMessages[localIdx - 1];
+              const grouped = shouldGroup(prev, msg);
+              const showDate = localIdx === 0 || !prev || !sameCalendarDay(prev.createdAt, msg.createdAt);
+              const isAuthor = msg.authorId === currentUserId;
+              const isThisEditing = editingId === msg.id;
+              return (
+                <Message
+                  msg={msg}
+                  grouped={grouped}
+                  showDate={showDate}
+                  canEdit={isAuthor}
+                  canDelete={isAuthor || isOwner}
+                  canPin={isOwner}
+                  isEditing={isThisEditing}
+                  editDraft={isThisEditing ? editDraft : ""}
+                  currentUserId={currentUserId}
+                  currentUsername={currentUsername}
+                  token={token}
+                  onStartEdit={startEdit}
+                  onCancelEdit={cancelEdit}
+                  onCommitEdit={commitEdit}
+                  onChangeEdit={setEditDraft}
+                  onDelete={deleteMessage}
+                  onReact={reactToMessage}
+                  onReply={replyToMessage}
+                  onPin={togglePin}
+                  onJumpTo={scrollToMessage}
+                />
+              );
+            }}
+          />
+          {showNewMsgBadge && (
+            <button
+              className="chat-new-msg-badge"
+              onClick={() => {
+                virtuosoRef.current?.scrollToIndex({ index: visibleMessages.length - 1, behavior: "smooth" });
+                setShowNewMsgBadge(false);
+              }}
+            >
+              ↓ Nova mensagem
+            </button>
+          )}
         </div>
       )}
 
       <TypingBar typers={typers} />
+
       {replyTo && (
         <div className="chat-reply-bar">
           <Ico.reply />
           <span className="chat-reply-bar-text">
-            Respondendo a <strong>{replyTo.authorName}</strong>: <em>{replyTo.content.slice(0, 80)}{replyTo.content.length > 80 ? "…" : ""}</em>
+            Respondendo a <strong>{replyTo.authorName}</strong>:{" "}
+            <em>{replyTo.content.slice(0, 80)}{replyTo.content.length > 80 ? "…" : ""}</em>
           </span>
           <button type="button" onClick={() => setReplyTo(null)} title="Cancelar resposta">
             <Ico.close />
           </button>
         </div>
       )}
+
       <div className="chat-input-wrap">
         {mentionQuery !== null && (() => {
-          const suggestions = members.filter(
-            (m) => m !== currentUsername && m.toLowerCase().startsWith(mentionQuery.toLowerCase())
-          ).slice(0, 6);
+          const suggestions = members
+            .filter((m) => m !== currentUsername && m.toLowerCase().startsWith(mentionQuery.toLowerCase()))
+            .slice(0, 6);
           if (suggestions.length === 0) return null;
           return (
             <div className="chat-mention-list">
@@ -771,8 +662,7 @@ export function ChatPanel({
               notifyTyping();
               const atIdx = val.lastIndexOf("@");
               if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === " ")) {
-                const query = val.slice(atIdx + 1).split(" ")[0];
-                setMentionQuery(query);
+                setMentionQuery(val.slice(atIdx + 1).split(" ")[0]);
               } else {
                 setMentionQuery(null);
               }
@@ -808,300 +698,6 @@ export function ChatPanel({
           <strong>enter</strong> enviar · <strong>shift+enter</strong> nova linha · <strong>**negrito**</strong> · <strong>_itálico_</strong> · <strong>`código`</strong>
         </div>
       </div>
-    </div>
-  );
-}
-
-interface MessageProps {
-  msg: ChatMessage;
-  grouped: boolean;
-  showDate: boolean;
-  canEdit: boolean;
-  canDelete: boolean;
-  canPin: boolean;
-  isEditing: boolean;
-  editDraft: string;
-  currentUserId: string;
-  currentUsername: string;
-  token: string;
-  onStartEdit: (msg: ChatMessage) => void;
-  onCancelEdit: () => void;
-  onCommitEdit: () => void;
-  onChangeEdit: (v: string) => void;
-  onDelete: (id: string) => void;
-  onReact: (id: string, emoji: string) => void;
-  onReply: (msg: ChatMessage) => void;
-  onPin: (msg: ChatMessage) => void;
-  onJumpTo: (id: string) => void;
-}
-
-const QUICK_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🔥"];
-
-const Message = memo(function Message({
-  msg,
-  grouped,
-  showDate,
-  canEdit,
-  canDelete,
-  canPin,
-  isEditing,
-  editDraft,
-  currentUserId,
-  currentUsername,
-  token,
-  onStartEdit,
-  onCancelEdit,
-  onCommitEdit,
-  onChangeEdit,
-  onDelete,
-  onReact,
-  onReply,
-  onPin,
-  onJumpTo,
-}: MessageProps) {
-  const [showReactPicker, setShowReactPicker] = useState(false);
-  const isInvite = msg.content.startsWith("lobby://join/");
-  const inviteCode = isInvite ? msg.content.replace("lobby://join/", "").trim() : null;
-  const media = !isInvite && !isEditing ? extractMedia(msg.content) : null;
-  const contentIsOnlyUrl = media && msg.content.trim() === media.url;
-  const urlMatches = !isInvite && !isEditing && !media ? msg.content.match(URL_RE) : null;
-  const plainUrl = urlMatches ? urlMatches[0].replace(/[),.;!?]+$/, "") : null;
-
-  return (
-    <>
-      {showDate && (
-        <div className="chat-date">
-          <div className="chat-date-line" />
-          <span className="chat-date-label">{formatDateLabel(msg.createdAt)}</span>
-          <div className="chat-date-line" />
-        </div>
-      )}
-      <div id={`msg-${msg.id}`} className={`chat-msg${grouped ? " grouped" : ""}`}>
-        {msg.replyTo && (
-          <div
-            className="chat-msg-reply-to"
-            onClick={() => onJumpTo(msg.replyTo!.id)}
-            title="Ir para mensagem original"
-          >
-            <Ico.reply />
-            <span className="chat-msg-reply-to-author">{msg.replyTo.authorName}</span>
-            <span className="chat-msg-reply-to-text">{msg.replyTo.content}</span>
-          </div>
-        )}
-        {!grouped ? (
-          <Avatar name={msg.authorName} id={msg.authorId} size={38} />
-        ) : (
-          <div className="chat-msg-grouped-spacer">
-            <span className="chat-msg-grouped-time">{formatTime(msg.createdAt)}</span>
-          </div>
-        )}
-        <div className="chat-msg-body">
-          {!grouped && (
-            <div className="chat-msg-head">
-              <span className="chat-msg-author">{msg.authorName}</span>
-              <span className="chat-msg-time">{formatTime(msg.createdAt)}</span>
-            </div>
-          )}
-          {isEditing ? (
-            <div className="chat-msg-edit">
-              <textarea
-                value={editDraft}
-                onChange={(e) => onChangeEdit(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    e.preventDefault();
-                    onCancelEdit();
-                  } else if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    onCommitEdit();
-                  }
-                }}
-                maxLength={2000}
-                autoFocus
-                rows={Math.min(6, Math.max(1, editDraft.split("\n").length))}
-              />
-              <div className="chat-msg-edit-hint">
-                <button type="button" className="btn-secondary" onClick={onCancelEdit}>
-                  Cancelar
-                </button>
-                <button type="button" onClick={onCommitEdit} disabled={!editDraft.trim()}>
-                  Salvar
-                </button>
-                <span>
-                  <strong>esc</strong> cancelar · <strong>enter</strong> salvar
-                </span>
-              </div>
-            </div>
-          ) : isInvite && inviteCode ? (
-            <InviteEmbed code={inviteCode} />
-          ) : (
-            <>
-              {!contentIsOnlyUrl && (
-                <p className="chat-msg-content">
-                  {formatMessage(msg.content, currentUsername)}
-                  {msg.editedAt && <span className="chat-msg-edited"> (editado)</span>}
-                </p>
-              )}
-              {media && <MediaEmbed url={media.url} />}
-              {plainUrl && <LinkPreview url={plainUrl} token={token} />}
-              {contentIsOnlyUrl && msg.editedAt && (
-                <span className="chat-msg-edited">(editado)</span>
-              )}
-            </>
-          )}
-          {msg.reactions.length > 0 && (
-            <div className="chat-msg-reactions">
-              {msg.reactions.map((r) => (
-                <button
-                  key={r.emoji}
-                  type="button"
-                  className={`chat-reaction${r.userIds.includes(currentUserId) ? " active" : ""}`}
-                  title={`${r.count} ${r.count === 1 ? "reação" : "reações"}`}
-                  onClick={() => onReact(msg.id, r.emoji)}
-                >
-                  {r.emoji} <span>{r.count}</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-        {!isEditing && (
-          <div className="chat-msg-actions">
-            <div className="chat-msg-react-wrap">
-              <button
-                type="button"
-                className="chat-msg-action-btn"
-                title="Reagir"
-                onClick={() => setShowReactPicker((v) => !v)}
-              >
-                😊
-              </button>
-              {showReactPicker && (
-                <div className="chat-msg-react-picker">
-                  {QUICK_REACTIONS.map((e) => (
-                    <button
-                      key={e}
-                      type="button"
-                      onClick={() => { onReact(msg.id, e); setShowReactPicker(false); }}
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-            <button type="button" className="chat-msg-action-btn" title="Responder" onClick={() => onReply(msg)}>
-              <Ico.reply />
-            </button>
-            {canPin && (
-              <button type="button" className="chat-msg-action-btn" title="Fixar/desfixar" onClick={() => onPin(msg)}>
-                <Ico.pin />
-              </button>
-            )}
-            {canEdit && (
-              <button type="button" className="chat-msg-action-btn" title="Editar" onClick={() => onStartEdit(msg)}>
-                <Ico.edit />
-              </button>
-            )}
-            {canDelete && (
-              <button type="button" className="chat-msg-action-btn danger" title="Apagar" onClick={() => onDelete(msg.id)}>
-                <Ico.trash />
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    </>
-  );
-});
-
-function TypingBar({ typers }: { typers: Record<string, string> }) {
-  const names = Object.values(typers);
-  if (names.length === 0) return <div className="chat-typing-bar" />;
-  const label =
-    names.length === 1
-      ? `${names[0]} está digitando...`
-      : names.length === 2
-      ? `${names[0]} e ${names[1]} estão digitando...`
-      : "Várias pessoas estão digitando...";
-  return (
-    <div className="chat-typing-bar">
-      <span className="chat-typing-dots">
-        <span /><span /><span />
-      </span>
-      <span className="chat-typing-text">{label}</span>
-    </div>
-  );
-}
-
-function LinkPreview({ url, token }: { url: string; token: string }) {
-  const [data, setData] = useState<{ title?: string; description?: string; image?: string; siteName?: string } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setData(null);
-    api.unfurl(token, url)
-      .then((res) => { if (!cancelled) setData(res); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [url, token]);
-
-  if (!data || (!data.title && !data.image)) {
-    return <a className="chat-msg-link" href={url} target="_blank" rel="noreferrer">{url}</a>;
-  }
-
-  return (
-    <div className="link-preview">
-      {data.image && (
-        <a href={url} target="_blank" rel="noreferrer">
-          <img src={data.image} alt="" className="link-preview-img" loading="lazy" />
-        </a>
-      )}
-      <div className="link-preview-body">
-        {data.siteName && <div className="link-preview-site">{data.siteName}</div>}
-        <a className="link-preview-title" href={url} target="_blank" rel="noreferrer">{data.title}</a>
-        {data.description && <p className="link-preview-desc">{data.description}</p>}
-      </div>
-    </div>
-  );
-}
-
-function MediaEmbed({ url }: { url: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) {
-    return (
-      <a className="chat-msg-link" href={url} target="_blank" rel="noreferrer">
-        {url}
-      </a>
-    );
-  }
-  return (
-    <a className="chat-media" href={url} target="_blank" rel="noreferrer">
-      <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
-    </a>
-  );
-}
-
-function InviteEmbed({ code }: { code: string }) {
-  return (
-    <div className="invite-embed">
-      <div className="invite-embed-stripe" />
-      <div className="invite-embed-tile">
-        <Ico.link />
-      </div>
-      <div className="invite-embed-text">
-        <div className="invite-embed-label">Convite de sala</div>
-        <div className="invite-embed-code">{code}</div>
-      </div>
-      <button
-        className="invite-embed-btn"
-        onClick={() => {
-          navigator.clipboard.writeText(`lobby://join/${code}`);
-        }}
-        title="Copiar link"
-      >
-        Entrar →
-      </button>
     </div>
   );
 }
