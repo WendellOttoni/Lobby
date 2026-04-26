@@ -10,6 +10,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  createLocalAudioTrack,
 } from "livekit-client";
 import { notify } from "../lib/notify";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
@@ -355,21 +356,35 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
 
     try {
       const { token: lkToken, url } = await api.getRoomToken(authToken, serverId, roomId);
-      await room.connect(url, lkToken);
+
+      // Captura do mic e conexão WebRTC são independentes — rodam em paralelo
+      const [localTrack] = await Promise.all([
+        createLocalAudioTrack({
+          noiseSuppression: noiseRef.current,
+          echoCancellation: echoRef.current,
+          autoGainControl: gainRef.current,
+        }),
+        room.connect(url, lkToken),
+      ]);
+
+      if (roomRef.current !== room) {
+        localTrack.stop();
+        return;
+      }
+
       room.remoteParticipants.forEach(applyVolumeTo);
       snapshotRoom(room);
-      await room.localParticipant.setMicrophoneEnabled(true, {
-        noiseSuppression: noiseRef.current,
-        echoCancellation: echoRef.current,
-        autoGainControl: gainRef.current,
-      });
+
+      // Publica o track já capturado + enumera devices em paralelo
+      const [devices] = await Promise.all([
+        Room.getLocalDevices("audioinput"),
+        room.localParticipant.publishTrack(localTrack),
+      ]);
 
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub?.track) setLocalMicTrack((micPub.track as LocalAudioTrack).mediaStreamTrack);
 
-      const devices = await Room.getLocalDevices("audioinput");
       setAudioDevices(devices);
-
       const saved = localStorage.getItem("lobby_mic_device");
       const preferred = saved ? devices.find((d) => d.deviceId === saved) : null;
       if (preferred) {
