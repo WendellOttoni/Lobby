@@ -913,44 +913,47 @@ export function ServerPage() {
         {voice.activeRoomName && <VoiceBar />}
       </div>
 
-      {/* ── View toggle tab bar ── */}
-      {screenShareCount > 0 && (
-        <div className="server-view-tabs">
-          <button
-            className={`server-view-tab${activeView === "chat" ? " active" : ""}`}
-            onClick={() => setActiveView("chat")}
-          >
-            Chat
-          </button>
-          <button
-            className={`server-view-tab${activeView === "screenshare" ? " active" : ""}`}
-            onClick={() => setActiveView("screenshare")}
-          >
-            Transmissões
-            <span className="server-view-tab-badge">{screenShareCount}</span>
-          </button>
-        </div>
-      )}
+      {/* ── Main content column (tabs + chat/screenshare) ── */}
+      <div className="server-main-col">
+        {/* Tab bar — só aparece quando há transmissões */}
+        {screenShareCount > 0 && (
+          <div className="server-view-tabs">
+            <button
+              className={`server-view-tab${activeView === "chat" ? " active" : ""}`}
+              onClick={() => setActiveView("chat")}
+            >
+              Chat
+            </button>
+            <button
+              className={`server-view-tab${activeView === "screenshare" ? " active" : ""}`}
+              onClick={() => setActiveView("screenshare")}
+            >
+              Transmissões
+              <span className="server-view-tab-badge">{screenShareCount}</span>
+            </button>
+          </div>
+        )}
 
-      {/* ── Screen share panel ── */}
-      {activeView === "screenshare" && screenShareCount > 0 && <ScreenShareView />}
+        {/* Screen share panel */}
+        {activeView === "screenshare" && screenShareCount > 0 && <ScreenShareView />}
 
-      {/* ── Chat ── */}
-      {activeView === "chat" && token && user && serverId && (
-        <ChatPanel
-          serverId={serverId}
-          token={token}
-          currentUserId={user.id}
-          currentUsername={user.username}
-          isOwner={isOwner}
-          channelId={currentChannelId}
-          channelName={activeChannelName}
-          onToggleMembers={() => setShowMembers((v) => !v)}
-          onOpenPins={() => setShowPins(true)}
-          onChannelMessage={onChannelMessage}
-          membersVisible={showMembers}
-        />
-      )}
+        {/* Chat */}
+        {activeView === "chat" && token && user && serverId && (
+          <ChatPanel
+            serverId={serverId}
+            token={token}
+            currentUserId={user.id}
+            currentUsername={user.username}
+            isOwner={isOwner}
+            channelId={currentChannelId}
+            channelName={activeChannelName}
+            onToggleMembers={() => setShowMembers((v) => !v)}
+            onOpenPins={() => setShowPins(true)}
+            onChannelMessage={onChannelMessage}
+            membersVisible={showMembers}
+          />
+        )}
+      </div>
 
       {showPins && token && serverId && (
         <PinsModal

@@ -220,6 +220,7 @@ a:hover { text-decoration: underline; }
 .app-main { flex: 1; display: flex; min-width: 0; overflow: hidden; }
 .server-page { flex: 1; display: flex; min-width: 0; overflow: hidden; }
 .server-content { flex: 1; display: flex; min-width: 0; overflow: hidden; }
+.server-main-col { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
 .no-servers {
   flex: 1;
@@ -3234,8 +3235,9 @@ a:hover { text-decoration: underline; }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(0,0,0,0.55);
+  padding: 10px 14px;
+  background: rgba(10,8,20,0.92);
+  border-top: 1px solid rgba(255,255,255,0.07);
   flex-shrink: 0;
   gap: 10px;
 }
@@ -3344,34 +3346,44 @@ a:hover { text-decoration: underline; }
 
 /* Shared controls */
 .sstv-quality-select {
-  font-size: 11px;
-  background: rgba(255,255,255,0.07);
-  border: 1px solid rgba(255,255,255,0.12);
-  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 6px;
   color: var(--text);
-  padding: 3px 6px;
+  padding: 5px 10px;
   cursor: pointer;
+  appearance: auto;
 }
-.sstv-quality-select:hover { background: rgba(255,255,255,0.12); }
+.sstv-quality-select:hover { background: rgba(255,255,255,0.16); }
+
+.sstv-quality-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
 
 .sstv-pause-btn {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 5px;
-  background: rgba(255,255,255,0.07);
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,0.15);
   color: var(--text);
   white-space: nowrap;
 }
-.sstv-pause-btn:hover { background: rgba(255,255,255,0.13); }
+.sstv-pause-btn:hover { background: rgba(255,255,255,0.18); }
 
 .sstv-stop-btn {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 3px 9px;
-  border-radius: 5px;
-  background: rgba(251,113,133,0.15);
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(251,113,133,0.18);
+  border: 1px solid rgba(251,113,133,0.3);
   color: var(--danger);
   white-space: nowrap;
 }
-.sstv-stop-btn:hover { background: rgba(251,113,133,0.25); }
+.sstv-stop-btn:hover { background: rgba(251,113,133,0.28); }

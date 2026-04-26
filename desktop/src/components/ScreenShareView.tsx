@@ -63,11 +63,11 @@ export function ScreenShareView() {
           <div className="sstv-main-controls">
             {mainId !== localIdentity ? (
               <>
+                <span className="sstv-quality-label">Qualidade:</span>
                 <select
                   className="sstv-quality-select"
                   value={streamQualities[mainId] ?? "high"}
                   onChange={(e) => setStreamQuality(mainId, e.target.value as Quality)}
-                  title="Qualidade"
                 >
                   {(Object.keys(QUALITY_LABELS) as Quality[]).map((q) => (
                     <option key={q} value={q}>{QUALITY_LABELS[q]}</option>
@@ -76,7 +76,6 @@ export function ScreenShareView() {
                 <button
                   className="sstv-pause-btn"
                   onClick={() => toggleStreamPaused(mainId)}
-                  title={pausedStreams.has(mainId) ? "Retomar" : "Pausar"}
                 >
                   {pausedStreams.has(mainId) ? "▶ Retomar" : "⏸ Pausar"}
                 </button>
