@@ -207,14 +207,28 @@ model Message {
   channelId   String?
   replyToId   String?
 
-  author      User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  server      Server            @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  channel     TextChannel?      @relation(fields: [channelId], references: [id], onDelete: SetNull)
-  replyTo     Message?          @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
-  replies     Message[]         @relation("MessageReplies")
+  author      User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  server      Server              @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  channel     TextChannel?        @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  replyTo     Message?            @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies     Message[]           @relation("MessageReplies")
   reactions   MessageReaction[]
   pin         MessagePin?
+  attachments MessageAttachment[]
 
   @@index([serverId, createdAt])
   @@index([channelId, createdAt])
+}
+
+model MessageAttachment {
+  id        String @id @default(cuid())
+  messageId String
+  filename  String
+  url       String
+  mimeType  String
+  size      Int
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
 }

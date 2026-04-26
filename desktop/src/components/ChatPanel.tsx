@@ -1,6 +1,6 @@
 import { FormEvent, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
-import { api, SearchResult } from "../lib/api";
+import { api, SearchResult, AttachmentMeta } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
 import { notify, isMentionNotifyEnabled } from "../lib/notify";
 import { Ico } from "./icons";
@@ -75,6 +75,9 @@ export function ChatPanel({
   const [searching, setSearching] = useState(false);
   const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isAtBottomRef = useRef(true);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -378,14 +381,30 @@ export function ChatPanel({
     typingTimerRef.current = setTimeout(() => { typingTimerRef.current = null; }, 3000);
   }
 
+  async function handleFileSelect(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    try {
+      const uploads = await Promise.all(Array.from(files).map((f) => api.uploadFile(token, f)));
+      setPendingAttachments((prev) => [...prev, ...uploads]);
+    } catch {
+      // silent — user may retry
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   function submitMessage() {
     const trimmed = input.trim();
-    if (!trimmed) return;
+    if (!trimmed && pendingAttachments.length === 0) return;
     const payload: Record<string, unknown> = { type: "message", content: trimmed, channelId };
     if (replyTo) payload.replyToId = replyTo.id;
+    if (pendingAttachments.length > 0) payload.attachments = pendingAttachments;
     if (send(payload)) {
       setInput("");
       setReplyTo(null);
+      setPendingAttachments([]);
       inputRef.current?.focus();
     }
   }
@@ -395,7 +414,7 @@ export function ChatPanel({
     submitMessage();
   }
 
-  const hasContent = input.trim().length > 0;
+  const hasContent = input.trim().length > 0 || pendingAttachments.length > 0;
   const visibleMessages = messages.filter((m) => m.channelId === channelId);
 
   return (
@@ -646,8 +665,43 @@ export function ChatPanel({
             </Suspense>
           </div>
         )}
+        {pendingAttachments.length > 0 && (
+          <div className="chat-attachment-preview">
+            {pendingAttachments.map((att, i) => (
+              <div key={att.url} className="chat-attachment-preview-item">
+                {att.mimeType.startsWith("image/") ? (
+                  <img src={att.url} alt={att.filename} />
+                ) : (
+                  <span className="chat-attachment-preview-name">{att.filename}</span>
+                )}
+                <button
+                  type="button"
+                  className="chat-attachment-preview-remove"
+                  onClick={() => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))}
+                  title="Remover"
+                >
+                  <Ico.close />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <form className="chat-input-shell" onSubmit={sendForm}>
-          <button type="button" className="chat-input-btn" title="Anexar">
+          <input
+            ref={fileInputRef}
+            type="file"
+            style={{ display: "none" }}
+            multiple
+            accept="image/*,video/mp4,application/pdf"
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          <button
+            type="button"
+            className={`chat-input-btn${uploading ? " uploading" : ""}`}
+            title="Anexar arquivo"
+            disabled={uploading || !connected}
+            onClick={() => fileInputRef.current?.click()}
+          >
             <Ico.attach />
           </button>
           <textarea

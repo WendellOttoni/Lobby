@@ -124,6 +124,13 @@ export interface SearchResult {
   channelId: string | null;
 }
 
+export interface AttachmentMeta {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 export interface LivekitTokenResponse {
   token: string;
   url: string;
@@ -392,6 +399,19 @@ export const api = {
 
   getCallToken: (token: string, userId: string) =>
     request<CallTokenResponse>(`/dm/${userId}/call-token`, { method: "POST", token }),
+
+  uploadFile: async (token: string, file: File): Promise<AttachmentMeta> => {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch(`${API_URL}/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new ApiError(response.status, data.error ?? "Upload falhou");
+    return data as AttachmentMeta;
+  },
 };
 
 export { ApiError };

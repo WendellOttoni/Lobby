@@ -3021,3 +3021,168 @@ a:hover { text-decoration: underline; }
   color: rgba(255,100,100,0.7);
   flex-shrink: 0;
 }
+
+/* ── File attachments in messages ─────────────────────────────────────────── */
+
+.chat-msg-attachments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.chat-attachment-image {
+  display: block;
+  max-width: 400px;
+}
+.chat-attachment-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+
+.chat-attachment-video {
+  display: block;
+  max-width: 400px;
+  max-height: 280px;
+  border-radius: 6px;
+  background: #000;
+}
+
+.chat-attachment-file {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 8px;
+  color: var(--text);
+  text-decoration: none;
+  max-width: 320px;
+}
+.chat-attachment-file:hover {
+  background: var(--surface-3);
+}
+.chat-attachment-file svg {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+.chat-attachment-file-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.chat-attachment-file-name {
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-attachment-file-size {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+/* ── Attachment preview in input ──────────────────────────────────────────── */
+
+.chat-attachment-preview {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px 0;
+}
+
+.chat-attachment-preview-item {
+  position: relative;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--surface-2);
+}
+.chat-attachment-preview-item img {
+  display: block;
+  width: 80px;
+  height: 80px;
+  object-fit: cover;
+}
+.chat-attachment-preview-name {
+  display: block;
+  padding: 6px 10px;
+  font-size: 11px;
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+.chat-attachment-preview-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.7);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  padding: 0;
+}
+.chat-attachment-preview-remove:hover {
+  background: rgba(180,40,40,0.85);
+}
+
+.chat-input-btn.uploading {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* ── Screen share view ────────────────────────────────────────────────────── */
+
+.screen-share-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-1, #12101a);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.screen-share-item {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #000;
+}
+
+.screen-share-label {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.screen-share-video {
+  display: block;
+  width: 100%;
+  max-height: 45vh;
+  object-fit: contain;
+  background: #000;
+}

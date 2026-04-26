@@ -1,5 +1,5 @@
 import { ReactNode, Suspense, lazy, memo, useEffect, useState } from "react";
-import { api } from "../lib/api";
+import { api, AttachmentMeta } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
 
@@ -30,6 +30,7 @@ export interface ChatMessage {
   channelId: string | null;
   replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
+  attachments?: AttachmentMeta[];
 }
 
 export interface MessageProps {
@@ -255,6 +256,13 @@ export const Message = memo(function Message({
               )}
             </>
           )}
+          {msg.attachments && msg.attachments.length > 0 && (
+            <div className="chat-msg-attachments">
+              {msg.attachments.map((att) => (
+                <Attachment key={att.url} attachment={att} />
+              ))}
+            </div>
+          )}
           {msg.reactions.length > 0 && (
             <div className="chat-msg-reactions">
               {msg.reactions.map((r) => (
@@ -389,6 +397,46 @@ export function MediaEmbed({ url }: { url: string }) {
   return (
     <a className="chat-media" href={url} target="_blank" rel="noreferrer">
       <img src={url} alt="" loading="lazy" onError={() => setFailed(true)} />
+    </a>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+export function Attachment({ attachment }: { attachment: AttachmentMeta }) {
+  const isImage = attachment.mimeType.startsWith("image/");
+  const isVideo = attachment.mimeType === "video/mp4";
+
+  if (isImage) {
+    return (
+      <a className="chat-attachment-image" href={attachment.url} target="_blank" rel="noreferrer">
+        <img src={attachment.url} alt={attachment.filename} loading="lazy" />
+      </a>
+    );
+  }
+
+  if (isVideo) {
+    return (
+      <video
+        className="chat-attachment-video"
+        src={attachment.url}
+        controls
+        preload="metadata"
+      />
+    );
+  }
+
+  return (
+    <a className="chat-attachment-file" href={attachment.url} target="_blank" rel="noreferrer" download>
+      <Ico.attach />
+      <div className="chat-attachment-file-info">
+        <span className="chat-attachment-file-name">{attachment.filename}</span>
+        <span className="chat-attachment-file-size">{formatBytes(attachment.size)}</span>
+      </div>
     </a>
   );
 }

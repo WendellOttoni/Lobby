@@ -1,8 +1,11 @@
 import "dotenv/config";
+import path from "path";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
 import websocket from "@fastify/websocket";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
 import jwtPlugin from "./plugins/jwt.js";
 import authRoutes from "./routes/auth.js";
 import serversRoutes from "./routes/servers.js";
@@ -13,6 +16,7 @@ import categoriesRoutes from "./routes/categories.js";
 import pinsRoutes from "./routes/pins.js";
 import friendsRoutes from "./routes/friends.js";
 import dmRoutes from "./routes/dm.js";
+import uploadRoutes, { uploadDir } from "./routes/upload.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
 import { validateEnv } from "./env.js";
@@ -56,6 +60,12 @@ fastify.register(cors, {
 
 fastify.register(websocket);
 fastify.register(rateLimit, { global: false });
+fastify.register(multipart, { limits: { files: 1, fileSize: 25 * 1024 * 1024 } });
+fastify.register(fastifyStatic, {
+  root: path.resolve(uploadDir),
+  prefix: "/uploads/",
+  decorateReply: false,
+});
 fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });
 fastify.register(serversRoutes, { prefix: "/servers" });
@@ -66,6 +76,7 @@ fastify.register(categoriesRoutes, { prefix: "/servers" });
 fastify.register(pinsRoutes, { prefix: "/servers" });
 fastify.register(friendsRoutes);
 fastify.register(dmRoutes);
+fastify.register(uploadRoutes);
 
 fastify.get("/health", async (_, reply) => {
   const checks: Record<string, "ok" | "fail"> = {};

@@ -13,6 +13,7 @@ import { Ico } from "../components/icons";
 import { ParticipantContextMenu } from "../components/ParticipantContextMenu";
 import { PinsModal } from "../components/PinsModal";
 import { ItemContextMenu, ItemMenuState, TransferModal } from "../components/ServerModals";
+import { ScreenShareView } from "../components/ScreenShareView";
 import { useVisiblePolling } from "../lib/usePolling";
 
 const COLLAPSED_KEY_PREFIX = "lobby_cat_collapsed_";
@@ -904,6 +905,9 @@ export function ServerPage() {
 
         {voice.activeRoomName && <VoiceBar />}
       </div>
+
+      {/* ── Screen share ── */}
+      <ScreenShareView />
 
       {/* ── Chat ── */}
       {token && user && serverId && (

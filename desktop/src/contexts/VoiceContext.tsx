@@ -7,6 +7,7 @@ import {
   Participant,
   RemoteParticipant,
   RemoteTrack,
+  RemoteTrackPublication,
   Room,
   RoomEvent,
   Track,
@@ -59,11 +60,14 @@ interface VoiceContextValue {
   noiseSuppression: boolean;
   echoCancellation: boolean;
   autoGainControl: boolean;
+  isScreenSharing: boolean;
+  screenShareStreams: Record<string, MediaStream>;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   connectDM: (lkToken: string, url: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
+  toggleScreenShare: () => Promise<void>;
   changeDevice: (deviceId: string) => Promise<void>;
   setVolumeAll: (v: number) => void;
   setNickname: (identity: string, name: string) => void;
@@ -173,6 +177,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [noiseSuppression, setNoiseSuppressionState] = useState<boolean>(() => loadBool(NOISE_SUPPRESSION_KEY, true));
   const [echoCancellation, setEchoCancellationState] = useState<boolean>(() => loadBool(ECHO_CANCEL_KEY, true));
   const [autoGainControl, setAutoGainControlState] = useState<boolean>(() => loadBool(AUTO_GAIN_KEY, true));
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenShareStreams, setScreenShareStreams] = useState<Record<string, MediaStream>>({});
   const noiseRef = useRef(noiseSuppression);
   const echoRef = useRef(echoCancellation);
   const gainRef = useRef(autoGainControl);
@@ -256,6 +262,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setIsReconnecting(false);
     setAudioDevices([]);
     setSelectedDevice("");
+    setIsScreenSharing(false);
+    setScreenShareStreams({});
     userWantsMutedRef.current = false;
     pttActiveRef.current = false;
     invoke("set_keep_awake", { enabled: false }).catch(() => {});
@@ -297,18 +305,27 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         notifyParticipantJoined(p.name ?? p.identity);
       })
       .on(RoomEvent.ParticipantDisconnected, () => snapshotRoom(room))
-      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
+      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();
           el.volume = volumeRef.current;
           document.body.appendChild(el);
           applyVolumeTo(participant);
+        } else if (track.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          const stream = track.mediaStream ?? new MediaStream([track.mediaStreamTrack]);
+          setScreenShareStreams((prev) => ({ ...prev, [participant.identity]: stream }));
         }
         snapshotRoom(room);
       })
-      .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+      .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) {
           track.detach().forEach((el) => el.remove());
+        } else if (track.kind === Track.Kind.Video && pub.source === Track.Source.ScreenShare) {
+          setScreenShareStreams((prev) => {
+            const next = { ...prev };
+            delete next[participant.identity];
+            return next;
+          });
         }
         snapshotRoom(room);
       })
@@ -324,14 +341,25 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       .on(RoomEvent.LocalTrackPublished, (pub: LocalTrackPublication) => {
         if (pub.track?.kind === Track.Kind.Audio) {
           setLocalMicTrack((pub.track as LocalAudioTrack).mediaStreamTrack);
-          snapshotRoom(room);
+        } else if (pub.source === Track.Source.ScreenShare && pub.track) {
+          const stream = pub.track.mediaStream ?? new MediaStream([pub.track.mediaStreamTrack]);
+          setScreenShareStreams((prev) => ({ ...prev, [room.localParticipant.identity]: stream }));
+          setIsScreenSharing(true);
         }
+        snapshotRoom(room);
       })
       .on(RoomEvent.LocalTrackUnpublished, (pub: LocalTrackPublication) => {
         if (pub.track?.kind === Track.Kind.Audio) {
           setLocalMicTrack(null);
-          snapshotRoom(room);
+        } else if (pub.source === Track.Source.ScreenShare) {
+          setIsScreenSharing(false);
+          setScreenShareStreams((prev) => {
+            const next = { ...prev };
+            delete next[room.localParticipant.identity];
+            return next;
+          });
         }
+        snapshotRoom(room);
       })
       .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
         setConnectionState(state);
@@ -447,6 +475,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       await room.localParticipant.setMicrophoneEnabled(false);
       userWantsMutedRef.current = true;
       setIsMuted(true);
+    }
+  }
+
+  async function toggleScreenShare() {
+    const room = roomRef.current;
+    if (!room) return;
+    const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    try {
+      await room.localParticipant.setScreenShareEnabled(!pub?.track);
+    } catch {
+      // User cancelled or permission denied
     }
   }
 
@@ -690,7 +729,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       volume, audioDevices, selectedDevice, localMicTrack, error,
       nicknames, userVolumes, pttKey, muteKey, deafenKey,
       localQuality, rtt, noiseSuppression, echoCancellation, autoGainControl,
-      connect, connectDM, disconnect, toggleMute, toggleDeafen, changeDevice, setVolumeAll,
+      isScreenSharing, screenShareStreams,
+      connect, connectDM, disconnect, toggleMute, toggleDeafen, toggleScreenShare, changeDevice, setVolumeAll,
       setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
       setNoiseSuppression, setEchoCancellation, setAutoGainControl, loadAudioDevices,
     }}>

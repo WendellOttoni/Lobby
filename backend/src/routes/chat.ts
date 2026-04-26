@@ -15,6 +15,13 @@ interface ReplySnippet {
   authorName: string;
 }
 
+interface AttachmentMeta {
+  url: string;
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 interface ChatMessage {
   id: string;
   content: string;
@@ -25,6 +32,7 @@ interface ChatMessage {
   channelId: string | null;
   replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
+  attachments: AttachmentMeta[];
 }
 
 interface RateBucket {
@@ -150,6 +158,7 @@ type MessageWithRels = {
     authorId: string;
     author: { username: string };
   } | null;
+  attachments: AttachmentMeta[];
 };
 
 function serialize(m: MessageWithRels): ChatMessage {
@@ -170,6 +179,7 @@ function serialize(m: MessageWithRels): ChatMessage {
         }
       : null,
     reactions: groupReactions(m.reactions),
+    attachments: m.attachments,
   };
 }
 
@@ -184,6 +194,7 @@ const MESSAGE_INCLUDE = {
       author: { select: { username: true } },
     },
   },
+  attachments: { select: { url: true, filename: true, mimeType: true, size: true } },
 } as const;
 
 const heartbeatTimer = setInterval(() => {
@@ -309,12 +320,27 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
           }
 
           if (data.type === "message") {
-            if (!data.content?.trim()) return;
-            const rawContent = String(data.content);
+            const rawContent = String(data.content ?? "");
+            const rawAttachments: AttachmentMeta[] = Array.isArray(data.attachments)
+              ? (data.attachments as unknown[])
+                  .filter(
+                    (a): a is AttachmentMeta =>
+                      typeof a === "object" &&
+                      a !== null &&
+                      typeof (a as AttachmentMeta).url === "string" &&
+                      typeof (a as AttachmentMeta).filename === "string" &&
+                      typeof (a as AttachmentMeta).mimeType === "string" &&
+                      typeof (a as AttachmentMeta).size === "number"
+                  )
+                  .slice(0, 10)
+              : [];
+
+            if (!rawContent.trim() && rawAttachments.length === 0) return;
             if (rawContent.length > 2000) {
               sendError("Mensagem muito longa (máx. 2000 caracteres).");
               return;
             }
+
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
             const replyToId = typeof data.replyToId === "string" ? data.replyToId : null;
             stopTyping(serverId, userId, username, channelId);
@@ -342,7 +368,25 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
             const content = rawContent.trim();
             const msg = await prisma.message.create({
-              data: { content, authorId: userId, serverId, channelId, replyToId },
+              data: {
+                content,
+                authorId: userId,
+                serverId,
+                channelId,
+                replyToId,
+                ...(rawAttachments.length > 0 && {
+                  attachments: {
+                    createMany: {
+                      data: rawAttachments.map((a) => ({
+                        url: a.url,
+                        filename: a.filename,
+                        mimeType: a.mimeType,
+                        size: a.size,
+                      })),
+                    },
+                  },
+                }),
+              },
               include: MESSAGE_INCLUDE,
             });
 

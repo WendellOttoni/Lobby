@@ -23,9 +23,12 @@ export function VoiceBar() {
     participants,
     toggleMute,
     toggleDeafen,
+    toggleScreenShare,
     disconnect,
     localQuality,
     rtt,
+    isScreenSharing,
+    activeServerId,
   } = useVoice();
 
   if (!activeRoomName) return null;
@@ -84,6 +87,17 @@ export function VoiceBar() {
           {isDeafened ? <Ico.headphonesOff /> : <Ico.headphones />}
           {isDeafened ? "Surdo" : "Ouvindo"}
         </button>
+        {activeServerId && (
+          <button
+            className={`now-playing-btn${isScreenSharing ? " muted" : ""}`}
+            onClick={toggleScreenShare}
+            disabled={!isConnected}
+            title={isScreenSharing ? "Parar compartilhamento" : "Compartilhar tela"}
+          >
+            <Ico.monitor />
+            {isScreenSharing ? "Parar" : "Tela"}
+          </button>
+        )}
         <button
           className="now-playing-btn-leave"
           onClick={disconnect}
