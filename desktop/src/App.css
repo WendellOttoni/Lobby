@@ -835,12 +835,14 @@ a:hover { text-decoration: underline; }
 .now-playing-btn:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
 .now-playing-btn.muted { background: rgba(251, 113, 133, 0.12); color: var(--danger); }
 .now-playing-btn-leave {
+  width: 100%;
   background: rgba(251, 113, 133, 0.15);
   color: var(--danger);
   padding: 7px 10px;
   border-radius: 9px;
   font-size: 11px;
   font-weight: 600;
+  margin-top: 4px;
 }
 .now-playing-btn-leave:hover { background: rgba(251, 113, 133, 0.25); }
 

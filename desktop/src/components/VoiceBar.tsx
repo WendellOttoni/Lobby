@@ -98,14 +98,14 @@ export function VoiceBar() {
             {isScreenSharing ? "Parar" : "Tela"}
           </button>
         )}
-        <button
-          className="now-playing-btn-leave"
-          onClick={disconnect}
-          title="Sair da sala"
-        >
-          Sair
-        </button>
       </div>
+      <button
+        className="now-playing-btn-leave"
+        onClick={disconnect}
+        title="Sair da sala"
+      >
+        Sair da sala
+      </button>
     </div>
   );
 }
