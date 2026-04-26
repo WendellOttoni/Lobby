@@ -418,7 +418,7 @@ export function ServerPage() {
           {/* Voice section */}
           <SectionLabel
             label="Voz"
-            onAdd={() => setShowNewRoom((v) => !v)}
+            onAdd={isOwner ? () => setShowNewRoom((v) => !v) : undefined}
           />
 
           {showNewRoom && (

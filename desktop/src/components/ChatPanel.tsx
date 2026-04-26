@@ -361,7 +361,7 @@ export function ChatPanel({
               scheduleMarkRead();
               const mentioned = msg.content.includes(`@${currentUsernameRef.current}`);
               if (document.hidden || mentioned) playMessageSound();
-              if (mentioned && document.hidden && isMentionNotifyEnabled()) {
+              if (mentioned && isMentionNotifyEnabled() && (document.hidden || !isAtBottomRef.current)) {
                 notify(
                   `Nova menção — #${channelIdRef.current ?? "geral"}`,
                   `${msg.authorName}: ${msg.content.slice(0, 80)}`
