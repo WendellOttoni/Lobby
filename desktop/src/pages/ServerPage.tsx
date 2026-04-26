@@ -906,7 +906,7 @@ export function ServerPage() {
           )}
         </div>
 
-        {voice.activeRoomName && voice.activeServerId === serverId && <VoiceBar />}
+        {voice.activeRoomName && <VoiceBar />}
       </div>
 
       {/* ── Chat ── */}
