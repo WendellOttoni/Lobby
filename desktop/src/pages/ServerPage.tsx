@@ -18,6 +18,16 @@ import { useVisiblePolling } from "../lib/usePolling";
 
 const COLLAPSED_KEY_PREFIX = "lobby_cat_collapsed_";
 
+interface ServerDataSnapshot {
+  server: Server;
+  rooms: Room[];
+  channels: TextChannel[];
+  categories: Category[];
+  generalUnread: number;
+  inviteCode: string;
+}
+const serverDataCache = new Map<string, ServerDataSnapshot>();
+
 function loadCollapsed(serverId: string): Set<string> {
   try {
     const raw = localStorage.getItem(COLLAPSED_KEY_PREFIX + serverId);
@@ -129,8 +139,20 @@ export function ServerPage() {
 
   useEffect(() => {
     if (!token || !serverId) return;
-    setLoading(true);
-    setCurrentChannelId(null);
+
+    const cached = serverDataCache.get(serverId);
+    if (cached) {
+      setServer(cached.server);
+      setRooms(cached.rooms);
+      setChannels(cached.channels);
+      setCategories(cached.categories);
+      setGeneralUnread(cached.generalUnread);
+      setInviteCode(cached.inviteCode);
+      setLoading(false);
+    } else {
+      setLoading(true);
+      setCurrentChannelId(null);
+    }
 
     Promise.all([
       api.getServer(token, serverId),
@@ -146,6 +168,9 @@ export function ServerPage() {
         setGeneralUnread(generalUnread);
         setInviteCode(server.inviteCode);
         setError(null);
+        serverDataCache.set(serverId, {
+          server, rooms, channels, categories, generalUnread, inviteCode: server.inviteCode,
+        });
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Erro"))
       .finally(() => setLoading(false));
@@ -208,6 +233,11 @@ export function ServerPage() {
     }
   }
 
+  function patchCache(serverId: string, patch: Partial<ServerDataSnapshot>) {
+    const entry = serverDataCache.get(serverId);
+    if (entry) serverDataCache.set(serverId, { ...entry, ...patch });
+  }
+
   async function onCreateChannel(e: FormEvent) {
     e.preventDefault();
     if (!token || !serverId || !newChannelName.trim()) return;
@@ -218,7 +248,7 @@ export function ServerPage() {
         await api.setChannelCategory(token, serverId, channel.id, newChannelCategory);
         final = { ...channel, categoryId: newChannelCategory };
       }
-      setChannels((prev) => [...prev, final]);
+      setChannels((prev) => { const next = [...prev, final]; patchCache(serverId, { channels: next }); return next; });
       setNewChannelName("");
       setNewChannelCategory(null);
       setShowNewChannel(false);
@@ -233,7 +263,7 @@ export function ServerPage() {
     if (!window.confirm(`Deletar o canal "#${channel.name}"?`)) return;
     try {
       await api.deleteChannel(token, serverId, channel.id);
-      setChannels((prev) => prev.filter((c) => c.id !== channel.id));
+      setChannels((prev) => { const next = prev.filter((c) => c.id !== channel.id); patchCache(serverId, { channels: next }); return next; });
       if (currentChannelId === channel.id) setCurrentChannelId(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao deletar canal");
@@ -248,7 +278,7 @@ export function ServerPage() {
     if (!name) return;
     try {
       const { channel } = await api.renameChannel(token, serverId, channelId, name);
-      setChannels((prev) => prev.map((c) => (c.id === channelId ? { ...c, name: channel.name } : c)));
+      setChannels((prev) => { const next = prev.map((c) => (c.id === channelId ? { ...c, name: channel.name } : c)); patchCache(serverId, { channels: next }); return next; });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao renomear canal");
     }

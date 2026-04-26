@@ -93,6 +93,12 @@ export function ChatPanel({
   const editDraftRef = useRef(editDraft);
   useEffect(() => { editDraftRef.current = editDraft; }, [editDraft]);
 
+  const historyCacheRef = useRef<Map<string | null, {
+    messages: ChatMessage[];
+    firstItemIndex: number;
+    hasMore: boolean;
+  }>>(new Map());
+
   function autoResize() {
     const el = inputRef.current;
     if (!el) return;
@@ -231,10 +237,13 @@ export function ChatPanel({
           const targetChannelId = "channelId" in data ? data.channelId : null;
           if (targetChannelId !== activeChannelId) return;
           if (data.replace) {
+            const fi = START_INDEX - incoming.length;
+            const hm = incoming.length >= 80;
             setMessages(incoming);
-            setFirstItemIndex(START_INDEX - incoming.length);
-            setHasMore(incoming.length >= 80);
+            setFirstItemIndex(fi);
+            setHasMore(hm);
             setHistoryLoaded(true);
+            historyCacheRef.current.set(targetChannelId, { messages: incoming, firstItemIndex: fi, hasMore: hm });
           } else if (data.prepend) {
             setMessages((prev) => mergeHistory(incoming, prev));
             setFirstItemIndex((idx) => idx - incoming.length);
@@ -253,7 +262,13 @@ export function ChatPanel({
         } else if (data.type === "message") {
           const msg = data as ChatMessage & { type: string };
           if (msg.channelId === activeChannelId) {
-            setMessages((prev) => (prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]));
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === msg.id)) return prev;
+              const updated = [...prev, msg];
+              const entry = historyCacheRef.current.get(activeChannelId);
+              if (entry) historyCacheRef.current.set(activeChannelId, { ...entry, messages: updated });
+              return updated;
+            });
             if (msg.authorId !== currentUserId && !isAtBottomRef.current) {
               setShowNewMsgBadge(true);
             }
@@ -273,17 +288,28 @@ export function ChatPanel({
             }
           }
         } else if (data.type === "edit") {
-          setMessages((prev) =>
-            prev.map((m) => m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m)
-          );
+          setMessages((prev) => {
+            const updated = prev.map((m) => m.id === data.id ? { ...m, content: data.content, editedAt: data.editedAt } : m);
+            const entry = historyCacheRef.current.get(activeChannelId);
+            if (entry) historyCacheRef.current.set(activeChannelId, { ...entry, messages: updated });
+            return updated;
+          });
         } else if (data.type === "delete") {
-          setMessages((prev) => prev.filter((m) => m.id !== data.id));
+          setMessages((prev) => {
+            const updated = prev.filter((m) => m.id !== data.id);
+            const entry = historyCacheRef.current.get(activeChannelId);
+            if (entry) historyCacheRef.current.set(activeChannelId, { ...entry, messages: updated });
+            return updated;
+          });
           setEditingId((id) => (id === data.id ? null : id));
           setReplyTo((r) => (r?.id === data.id ? null : r));
         } else if (data.type === "reactions") {
-          setMessages((prev) =>
-            prev.map((m) => m.id === data.messageId ? { ...m, reactions: data.reactions } : m)
-          );
+          setMessages((prev) => {
+            const updated = prev.map((m) => m.id === data.messageId ? { ...m, reactions: data.reactions } : m);
+            const entry = historyCacheRef.current.get(activeChannelId);
+            if (entry) historyCacheRef.current.set(activeChannelId, { ...entry, messages: updated });
+            return updated;
+          });
         } else if (data.type === "typing") {
           if (data.channelId !== activeChannelId) return;
           setTypers((prev) => {
@@ -309,13 +335,20 @@ export function ChatPanel({
     };
   }, [serverId, token, currentUserId]);
 
-  // Channel switch: send selectChannel over existing WS
+  // Channel switch: restore from cache for instant render, then refresh in background
   useEffect(() => {
-    setMessages([]);
-    setHistoryLoaded(false);
+    const cached = historyCacheRef.current.get(channelId);
+    if (cached) {
+      setMessages(cached.messages);
+      setFirstItemIndex(cached.firstItemIndex);
+      setHasMore(cached.hasMore);
+      setHistoryLoaded(true);
+    } else {
+      setMessages([]);
+      setHistoryLoaded(false);
+    }
     setReplyTo(null);
     setTypers({});
-    setHasMore(false);
     setLoadingMore(false);
     setShowNewMsgBadge(false);
     if (markReadTimer.current) {
