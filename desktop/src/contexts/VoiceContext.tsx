@@ -1,8 +1,10 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import {
+  ConnectionQuality,
   ConnectionState,
   LocalAudioTrack,
   LocalTrackPublication,
+  Participant,
   RemoteParticipant,
   RemoteTrack,
   Room,
@@ -19,6 +21,7 @@ export interface VoiceParticipant {
   isLocal: boolean;
   isSpeaking: boolean;
   isMuted: boolean;
+  quality: ConnectionQuality;
 }
 
 interface ConnectParams {
@@ -48,6 +51,11 @@ interface VoiceContextValue {
   pttKey: string | null;
   muteKey: string | null;
   deafenKey: string | null;
+  localQuality: ConnectionQuality;
+  rtt: number | null;
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGainControl: boolean;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
@@ -59,6 +67,10 @@ interface VoiceContextValue {
   setPttKey: (key: string | null) => void;
   setMuteKey: (key: string | null) => void;
   setDeafenKey: (key: string | null) => void;
+  setNoiseSuppression: (v: boolean) => void;
+  setEchoCancellation: (v: boolean) => void;
+  setAutoGainControl: (v: boolean) => void;
+  loadAudioDevices: () => Promise<void>;
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -69,6 +81,15 @@ const USER_VOLUMES_KEY = "lobby_user_volumes";
 const PTT_KEY_STORAGE = "lobby_ptt_key";
 const MUTE_KEY_STORAGE = "lobby_mute_key";
 const DEAFEN_KEY_STORAGE = "lobby_deafen_key";
+const NOISE_SUPPRESSION_KEY = "lobby_noise_suppression";
+const ECHO_CANCEL_KEY = "lobby_echo_cancel";
+const AUTO_GAIN_KEY = "lobby_auto_gain";
+
+function loadBool(key: string, fallback: boolean): boolean {
+  const v = localStorage.getItem(key);
+  if (v === null) return fallback;
+  return v === "true";
+}
 
 const RECONNECT_DELAYS = [2000, 5000, 10000, 20000, 30000];
 
@@ -143,6 +164,17 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     loadJSON<Record<string, number>>(USER_VOLUMES_KEY, {})
   );
   const userVolumesRef = useRef(userVolumes);
+  const [localQuality, setLocalQuality] = useState<ConnectionQuality>(ConnectionQuality.Unknown);
+  const [rtt, setRtt] = useState<number | null>(null);
+  const [noiseSuppression, setNoiseSuppressionState] = useState<boolean>(() => loadBool(NOISE_SUPPRESSION_KEY, true));
+  const [echoCancellation, setEchoCancellationState] = useState<boolean>(() => loadBool(ECHO_CANCEL_KEY, true));
+  const [autoGainControl, setAutoGainControlState] = useState<boolean>(() => loadBool(AUTO_GAIN_KEY, true));
+  const noiseRef = useRef(noiseSuppression);
+  const echoRef = useRef(echoCancellation);
+  const gainRef = useRef(autoGainControl);
+  useEffect(() => { noiseRef.current = noiseSuppression; }, [noiseSuppression]);
+  useEffect(() => { echoRef.current = echoCancellation; }, [echoCancellation]);
+  useEffect(() => { gainRef.current = autoGainControl; }, [autoGainControl]);
 
   // Register/unregister PTT global shortcut whenever pttKey changes
   useEffect(() => {
@@ -190,6 +222,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       isLocal: true,
       isSpeaking: room.localParticipant.isSpeaking,
       isMuted: !room.localParticipant.isMicrophoneEnabled,
+      quality: room.localParticipant.connectionQuality,
     });
     room.remoteParticipants.forEach((p) => {
       const pub = p.getTrackPublication(Track.Source.Microphone);
@@ -199,9 +232,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         isLocal: false,
         isSpeaking: p.isSpeaking,
         isMuted: pub?.isMuted ?? true,
+        quality: p.connectionQuality,
       });
     });
     setParticipants(list);
+    setLocalQuality(room.localParticipant.connectionQuality);
   }
 
   function resetState() {
@@ -272,6 +307,12 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       .on(RoomEvent.TrackMuted, () => snapshotRoom(room))
       .on(RoomEvent.TrackUnmuted, () => snapshotRoom(room))
       .on(RoomEvent.ActiveSpeakersChanged, () => snapshotRoom(room))
+      .on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+        if (participant.identity === room.localParticipant.identity) {
+          setLocalQuality(quality);
+        }
+        snapshotRoom(room);
+      })
       .on(RoomEvent.LocalTrackPublished, (pub: LocalTrackPublication) => {
         if (pub.track?.kind === Track.Kind.Audio) {
           setLocalMicTrack((pub.track as LocalAudioTrack).mediaStreamTrack);
@@ -317,7 +358,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       await room.connect(url, lkToken);
       room.remoteParticipants.forEach(applyVolumeTo);
       snapshotRoom(room);
-      await room.localParticipant.setMicrophoneEnabled(true);
+      await room.localParticipant.setMicrophoneEnabled(true, {
+        noiseSuppression: noiseRef.current,
+        echoCancellation: echoRef.current,
+        autoGainControl: gainRef.current,
+      });
 
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub?.track) setLocalMicTrack((micPub.track as LocalAudioTrack).mediaStreamTrack);
@@ -453,6 +498,63 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     if (p) p.setVolume(volumeRef.current * clamped);
   }
 
+  useEffect(() => {
+    const handle = setInterval(async () => {
+      const room = roomRef.current;
+      if (!room || room.state !== ConnectionState.Connected) {
+        setRtt(null);
+        return;
+      }
+      try {
+        const stats = await room.engine.pcManager?.subscriber?.getStats();
+        if (!stats) return;
+        let rttMs: number | null = null;
+        stats.forEach((report) => {
+          const r = report as RTCStatsReport[keyof RTCStatsReport] & {
+            type?: string;
+            currentRoundTripTime?: number;
+          };
+          if (r.type === "candidate-pair" && typeof r.currentRoundTripTime === "number") {
+            rttMs = Math.round(r.currentRoundTripTime * 1000);
+          }
+        });
+        if (rttMs !== null) setRtt(rttMs);
+      } catch {}
+    }, 3000);
+    return () => clearInterval(handle);
+  }, []);
+
+  async function loadAudioDevices() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+    } catch {}
+    try {
+      const devices = await Room.getLocalDevices("audioinput");
+      setAudioDevices(devices);
+      if (!selectedDevice) {
+        const saved = localStorage.getItem("lobby_mic_device");
+        const preferred = saved ? devices.find((d) => d.deviceId === saved) : null;
+        setSelectedDevice(preferred?.deviceId ?? devices[0]?.deviceId ?? "");
+      }
+    } catch {}
+  }
+
+  function setNoiseSuppression(v: boolean) {
+    setNoiseSuppressionState(v);
+    localStorage.setItem(NOISE_SUPPRESSION_KEY, String(v));
+  }
+
+  function setEchoCancellation(v: boolean) {
+    setEchoCancellationState(v);
+    localStorage.setItem(ECHO_CANCEL_KEY, String(v));
+  }
+
+  function setAutoGainControl(v: boolean) {
+    setAutoGainControlState(v);
+    localStorage.setItem(AUTO_GAIN_KEY, String(v));
+  }
+
   function setPttKey(key: string | null) {
     if (key) localStorage.setItem(PTT_KEY_STORAGE, key);
     else localStorage.removeItem(PTT_KEY_STORAGE);
@@ -477,8 +579,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       connectionState, participants, isMuted, isDeafened, isPTTActive, isReconnecting,
       volume, audioDevices, selectedDevice, localMicTrack, error,
       nicknames, userVolumes, pttKey, muteKey, deafenKey,
+      localQuality, rtt, noiseSuppression, echoCancellation, autoGainControl,
       connect, disconnect, toggleMute, toggleDeafen, changeDevice, setVolumeAll,
       setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
+      setNoiseSuppression, setEchoCancellation, setAutoGainControl, loadAudioDevices,
     }}>
       {children}
     </VoiceContext.Provider>

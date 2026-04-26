@@ -13,7 +13,20 @@ export interface TextChannel {
   name: string;
   serverId: string;
   createdAt: string;
+  categoryId?: string | null;
+  position?: number;
   unreadCount?: number;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  position: number;
+}
+
+export interface VoiceParticipantPreview {
+  identity: string;
+  name: string;
 }
 
 export interface PinnedMessage {
@@ -53,6 +66,8 @@ export interface Room {
   name: string;
   createdAt: string;
   onlineCount: number;
+  categoryId?: string | null;
+  position?: number;
 }
 
 export interface Member {
@@ -192,8 +207,62 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  renameChannel: (token: string, serverId: string, channelId: string, name: string) =>
+    request<{ channel: TextChannel }>(`/servers/${serverId}/channels/${channelId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
   deleteChannel: (token: string, serverId: string, channelId: string) =>
     request<void>(`/servers/${serverId}/channels/${channelId}`, { method: "DELETE", token }),
+
+  renameRoom: (token: string, serverId: string, roomId: string, name: string) =>
+    request<{ room: Room }>(`/servers/${serverId}/rooms/${roomId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  listRoomParticipants: (token: string, serverId: string, roomId: string) =>
+    request<{ participants: VoiceParticipantPreview[] }>(
+      `/servers/${serverId}/rooms/${roomId}/participants`,
+      { token }
+    ),
+
+  listCategories: (token: string, serverId: string) =>
+    request<{ categories: Category[] }>(`/servers/${serverId}/categories`, { token }),
+
+  createCategory: (token: string, serverId: string, name: string) =>
+    request<{ category: Category }>(`/servers/${serverId}/categories`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  renameCategory: (token: string, serverId: string, categoryId: string, name: string) =>
+    request<{ category: Category }>(`/servers/${serverId}/categories/${categoryId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ name }),
+    }),
+
+  deleteCategory: (token: string, serverId: string, categoryId: string) =>
+    request<void>(`/servers/${serverId}/categories/${categoryId}`, { method: "DELETE", token }),
+
+  setChannelCategory: (token: string, serverId: string, channelId: string, categoryId: string | null) =>
+    request<void>(`/servers/${serverId}/channels/${channelId}/category`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ categoryId }),
+    }),
+
+  setRoomCategory: (token: string, serverId: string, roomId: string, categoryId: string | null) =>
+    request<void>(`/servers/${serverId}/rooms/${roomId}/category`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ categoryId }),
+    }),
 
   listPins: (token: string, serverId: string) =>
     request<{ pins: PinnedMessage[] }>(`/servers/${serverId}/pins`, { token }),
@@ -240,7 +309,7 @@ export const api = {
     }),
 
   searchMessages: (token: string, serverId: string, q: string) =>
-    request<{ results: Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string }> }>(
+    request<{ results: Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string; channelId: string | null }> }>(
       `/servers/${serverId}/messages/search?q=${encodeURIComponent(q)}`,
       { token }
     ),

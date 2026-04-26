@@ -27,6 +27,40 @@ async function uniqueInviteCode(): Promise<string> {
 
 const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 
+interface SearchFilters {
+  text: string;
+  from?: string;
+  channel?: string;
+  before?: Date;
+  after?: Date;
+  hasLink?: boolean;
+  hasImage?: boolean;
+}
+
+function parseSearchQuery(raw: string): SearchFilters {
+  const filters: SearchFilters = { text: "" };
+  const tokens = raw.split(/\s+/);
+  const remaining: string[] = [];
+  for (const tok of tokens) {
+    const colon = tok.indexOf(":");
+    if (colon > 0) {
+      const key = tok.slice(0, colon).toLowerCase();
+      const val = tok.slice(colon + 1);
+      if (key === "from" && val) { filters.from = val; continue; }
+      if (key === "in" && val) { filters.channel = val.replace(/^#/, ""); continue; }
+      if (key === "before" && val) { const d = new Date(val); if (!isNaN(d.getTime())) { filters.before = d; continue; } }
+      if (key === "after" && val) { const d = new Date(val); if (!isNaN(d.getTime())) { filters.after = d; continue; } }
+      if (key === "has") {
+        if (val === "link") { filters.hasLink = true; continue; }
+        if (val === "image" || val === "img") { filters.hasImage = true; continue; }
+      }
+    }
+    remaining.push(tok);
+  }
+  filters.text = remaining.join(" ").trim();
+  return filters;
+}
+
 const serversRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.addHook("preHandler", fastify.authenticate);
 
@@ -118,7 +152,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
   });
 
   // Preview server from invite (before joining)
-  fastify.get("/invite/:code", async (request, reply) => {
+  fastify.get("/invite/:code", { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } }, async (request, reply) => {
     const { code } = request.params as { code: string };
 
     const server = await prisma.server.findUnique({
@@ -266,8 +300,8 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     const [rooms, lkRooms] = await Promise.all([
       prisma.room.findMany({
         where: { serverId },
-        select: { id: true, name: true, createdAt: true },
-        orderBy: { createdAt: "asc" },
+        select: { id: true, name: true, createdAt: true, categoryId: true, position: true },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       }),
       getRoomService().listRooms().catch(() => []),
     ]);
@@ -308,6 +342,72 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
       return reply.status(201).send({ room });
     },
+  });
+
+  // Rename room (owner only)
+  fastify.patch("/:serverId/rooms/:roomId", {
+    config: mutateLimit,
+    schema: {
+      body: {
+        type: "object",
+        required: ["name"],
+        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { sub } = request.user as { sub: string };
+      const { serverId, roomId } = request.params as { serverId: string; roomId: string };
+      const { name } = request.body as { name: string };
+
+      const server = await prisma.server.findUnique({ where: { id: serverId } });
+      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode renomear salas" });
+
+      const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
+      if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
+
+      const updated = await prisma.room.update({
+        where: { id: roomId },
+        data: { name: name.trim() },
+        select: { id: true, name: true, createdAt: true },
+      });
+
+      return reply.send({ room: updated });
+    },
+  });
+
+  // List participants currently in a voice room (LiveKit)
+  fastify.get("/:serverId/rooms/:roomId/participants", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, roomId } = request.params as { serverId: string; roomId: string };
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
+    if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
+
+    const lkParticipants = await getRoomService()
+      .listParticipants(roomId)
+      .catch(() => []);
+
+    if (lkParticipants.length === 0) return reply.send({ participants: [] });
+
+    const userIds = lkParticipants.map((p) => p.identity);
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, username: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.username]));
+
+    return reply.send({
+      participants: lkParticipants.map((p) => ({
+        identity: p.identity,
+        name: userMap.get(p.identity) ?? p.name ?? p.identity,
+      })),
+    });
   });
 
   // Delete room (owner only)
@@ -358,7 +458,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     });
   });
 
-  // Search messages in server
+  // Search messages in server (supports filters: from:user has:link has:image before:YYYY-MM-DD after:YYYY-MM-DD in:channel)
   fastify.get("/:serverId/messages/search", async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId } = request.params as { serverId: string };
@@ -371,13 +471,59 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     });
     if (!member) return reply.status(403).send({ error: "Sem acesso" });
 
+    const filters = parseSearchQuery(q.trim());
+
+    let authorId: string | undefined;
+    if (filters.from) {
+      const author = await prisma.user.findUnique({
+        where: { username: filters.from },
+        select: { id: true },
+      });
+      if (!author) return reply.send({ results: [] });
+      authorId = author.id;
+    }
+
+    let channelId: string | null | undefined;
+    if (filters.channel === "geral") {
+      channelId = null;
+    } else if (filters.channel) {
+      const channel = await prisma.textChannel.findFirst({
+        where: { serverId, name: filters.channel },
+        select: { id: true },
+      });
+      if (!channel) return reply.send({ results: [] });
+      channelId = channel.id;
+    }
+
+    const where: Record<string, unknown> = { serverId };
+    if (filters.text) where.content = { contains: filters.text, mode: "insensitive" };
+    if (authorId) where.authorId = authorId;
+    if (channelId !== undefined) where.channelId = channelId;
+    if (filters.before || filters.after) {
+      const range: { gte?: Date; lte?: Date } = {};
+      if (filters.after) range.gte = filters.after;
+      if (filters.before) range.lte = filters.before;
+      where.createdAt = range;
+    }
+    if (filters.hasLink) {
+      where.content = { contains: filters.text || "http", mode: "insensitive" };
+    }
+    if (filters.hasImage) {
+      where.OR = [
+        { content: { contains: ".png", mode: "insensitive" } },
+        { content: { contains: ".jpg", mode: "insensitive" } },
+        { content: { contains: ".jpeg", mode: "insensitive" } },
+        { content: { contains: ".gif", mode: "insensitive" } },
+        { content: { contains: ".webp", mode: "insensitive" } },
+        { content: { contains: "tenor.com", mode: "insensitive" } },
+        { content: { contains: "giphy.com", mode: "insensitive" } },
+      ];
+    }
+
     const results = await prisma.message.findMany({
-      where: {
-        serverId,
-        content: { contains: q.trim(), mode: "insensitive" },
-      },
+      where,
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: 50,
       include: { author: { select: { username: true } } },
     });
 
@@ -388,6 +534,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
         createdAt: m.createdAt.toISOString(),
         authorId: m.authorId,
         authorName: m.author.username,
+        channelId: m.channelId,
       })),
     });
   });

@@ -1,29 +1,48 @@
-import { ConnectionState } from "livekit-client";
+import { ConnectionQuality, ConnectionState } from "livekit-client";
 import { useVoice } from "../contexts/VoiceContext";
 import { WaveBars } from "./WaveBars";
 import { Ico } from "./icons";
+
+function qualityLabel(q: ConnectionQuality): { color: string; text: string } {
+  switch (q) {
+    case ConnectionQuality.Excellent: return { color: "var(--good)", text: "Excelente" };
+    case ConnectionQuality.Good: return { color: "var(--good)", text: "Boa" };
+    case ConnectionQuality.Poor: return { color: "var(--warn, #e0a040)", text: "Ruim" };
+    case ConnectionQuality.Lost: return { color: "var(--bad, #e04040)", text: "Perdida" };
+    default: return { color: "var(--text-muted)", text: "—" };
+  }
+}
 
 export function VoiceBar() {
   const {
     activeRoomName,
     connectionState,
     isMuted,
+    isDeafened,
     isReconnecting,
     participants,
     toggleMute,
+    toggleDeafen,
     disconnect,
+    localQuality,
+    rtt,
   } = useVoice();
 
   if (!activeRoomName) return null;
 
   const isConnected = connectionState === ConnectionState.Connected;
-  const listenerCount = Math.max(participants.length, 1);
+  const count = participants.length;
+  const q = qualityLabel(localQuality);
 
   const statusLabel = isConnected
-    ? `Ao vivo · ${listenerCount} ${listenerCount === 1 ? "ouvindo" : "ouvindo"}`
+    ? `Ao vivo · ${count} ${count === 1 ? "pessoa" : "pessoas"}`
     : isReconnecting
     ? "Reconectando..."
     : "Conectando...";
+
+  const qualityTitle = isConnected
+    ? `Qualidade: ${q.text}${rtt !== null ? ` · ${rtt}ms` : ""}`
+    : "Sem conexão";
 
   return (
     <div className="now-playing">
@@ -38,6 +57,12 @@ export function VoiceBar() {
             {statusLabel}
           </div>
         </div>
+        <div className="now-playing-quality" title={qualityTitle}>
+          <QualityBars quality={localQuality} />
+          {rtt !== null && isConnected && (
+            <span className="now-playing-rtt">{rtt}ms</span>
+          )}
+        </div>
         <WaveBars live={isConnected && !isMuted} color="var(--cyan)" count={5} />
       </div>
       <div className="now-playing-actions">
@@ -51,6 +76,15 @@ export function VoiceBar() {
           {isMuted ? "Mutado" : "Falar"}
         </button>
         <button
+          className={`now-playing-btn${isDeafened ? " muted" : ""}`}
+          onClick={toggleDeafen}
+          disabled={!isConnected}
+          title={isDeafened ? "Voltar a ouvir" : "Ensurdecer (silencia tudo)"}
+        >
+          {isDeafened ? <Ico.headphonesOff /> : <Ico.headphones />}
+          {isDeafened ? "Surdo" : "Ouvindo"}
+        </button>
+        <button
           className="now-playing-btn-leave"
           onClick={disconnect}
           title="Sair da sala"
@@ -58,6 +92,27 @@ export function VoiceBar() {
           Sair
         </button>
       </div>
+    </div>
+  );
+}
+
+function QualityBars({ quality }: { quality: ConnectionQuality }) {
+  const filled =
+    quality === ConnectionQuality.Excellent ? 3 :
+    quality === ConnectionQuality.Good ? 2 :
+    quality === ConnectionQuality.Poor ? 1 :
+    quality === ConnectionQuality.Lost ? 0 : 0;
+  const color = qualityLabel(quality).color;
+  return (
+    <div className="quality-bars" aria-label={`Qualidade: ${qualityLabel(quality).text}`}>
+      {[1, 2, 3].map((i) => (
+        <span
+          key={i}
+          className="quality-bar"
+          style={{ background: i <= filled ? color : "var(--surface-3, rgba(255,255,255,0.08))" }}
+          data-h={i}
+        />
+      ))}
     </div>
   );
 }

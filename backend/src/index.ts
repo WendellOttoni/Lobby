@@ -9,6 +9,7 @@ import serversRoutes from "./routes/servers.js";
 import chatRoutes from "./routes/chat.js";
 import unfurlRoutes from "./routes/unfurl.js";
 import channelRoutes from "./routes/channels.js";
+import categoriesRoutes from "./routes/categories.js";
 import pinsRoutes from "./routes/pins.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
@@ -59,6 +60,7 @@ fastify.register(serversRoutes, { prefix: "/servers" });
 fastify.register(chatRoutes);
 fastify.register(unfurlRoutes);
 fastify.register(channelRoutes, { prefix: "/servers" });
+fastify.register(categoriesRoutes, { prefix: "/servers" });
 fastify.register(pinsRoutes, { prefix: "/servers" });
 
 fastify.get("/health", async (_, reply) => {

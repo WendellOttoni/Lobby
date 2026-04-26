@@ -17,7 +17,7 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
 
     const channels = await prisma.textChannel.findMany({
       where: { serverId },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ position: "asc" }, { createdAt: "asc" }],
     });
 
     const reads = channels.length > 0
@@ -49,6 +49,8 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       name: c.name,
       serverId: c.serverId,
       createdAt: c.createdAt,
+      categoryId: c.categoryId,
+      position: c.position,
       unreadCount: unreadByChannel.get(c.id) ?? 0,
     }));
 
@@ -87,6 +89,36 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       });
 
       return reply.status(201).send({ channel });
+    },
+  });
+
+  fastify.patch("/:serverId/channels/:channelId", {
+    config: mutateLimit,
+    schema: {
+      body: {
+        type: "object",
+        required: ["name"],
+        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+      },
+    },
+    handler: async (request, reply) => {
+      const { sub } = request.user as { sub: string };
+      const { serverId, channelId } = request.params as { serverId: string; channelId: string };
+      const { name } = request.body as { name: string };
+
+      const server = await prisma.server.findUnique({ where: { id: serverId } });
+      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode renomear canais" });
+
+      const channel = await prisma.textChannel.findFirst({ where: { id: channelId, serverId } });
+      if (!channel) return reply.status(404).send({ error: "Canal não encontrado" });
+
+      const updated = await prisma.textChannel.update({
+        where: { id: channelId },
+        data: { name: name.trim() },
+      });
+
+      return reply.send({ channel: updated });
     },
   });
 

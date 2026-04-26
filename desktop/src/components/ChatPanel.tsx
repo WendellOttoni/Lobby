@@ -171,8 +171,9 @@ export function ChatPanel({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string }> | null>(null);
+  const [searchResults, setSearchResults] = useState<Array<{ id: string; content: string; createdAt: string; authorId: string; authorName: string; channelId: string | null }> | null>(null);
   const [searching, setSearching] = useState(false);
+  const [showSearchHelp, setShowSearchHelp] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -508,27 +509,55 @@ export function ChatPanel({
           <Ico.search />
           <input
             ref={searchInputRef}
-            placeholder="Buscar mensagens... (Esc para fechar)"
+            placeholder="Buscar... ex: from:wendell deploy / has:image / before:2026-01-01"
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); runSearch(e.target.value); }}
             autoComplete="off"
           />
           {searching && <span className="chat-search-spinner">…</span>}
-          <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); }}>
+          <button
+            type="button"
+            className="chat-search-help-btn"
+            title="Ajuda"
+            onClick={() => setShowSearchHelp((v) => !v)}
+          >
+            ?
+          </button>
+          <button type="button" onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); setShowSearchHelp(false); }}>
             <Ico.close />
           </button>
+        </div>
+      )}
+      {searchOpen && showSearchHelp && (
+        <div className="chat-search-help">
+          <strong>Filtros:</strong>{" "}
+          <code>from:usuario</code>{" · "}
+          <code>in:nomedocanal</code>{" · "}
+          <code>has:link</code>{" · "}
+          <code>has:image</code>{" · "}
+          <code>before:2026-01-01</code>{" · "}
+          <code>after:2025-12-01</code>
         </div>
       )}
       {searchOpen && searchResults !== null && (
         <div className="chat-search-results">
           {searchResults.length === 0 && <p className="chat-search-empty">Nenhum resultado.</p>}
-          {searchResults.map((r) => (
-            <div key={r.id} className="chat-search-result">
-              <span className="chat-search-result-author">{r.authorName}</span>
-              <span className="chat-search-result-time">{formatTime(r.createdAt)}</span>
-              <p className="chat-search-result-content">{r.content}</p>
-            </div>
-          ))}
+          {searchResults.map((r) => {
+            const sameChannel = r.channelId === channelId;
+            return (
+              <div
+                key={r.id}
+                className={`chat-search-result${sameChannel ? " jumpable" : ""}`}
+                onClick={sameChannel ? () => { scrollToMessage(r.id); setSearchOpen(false); } : undefined}
+                title={sameChannel ? "Pular para esta mensagem" : "Em outro canal"}
+              >
+                <span className="chat-search-result-author">{r.authorName}</span>
+                <span className="chat-search-result-time">{formatTime(r.createdAt)}</span>
+                {!sameChannel && <span className="chat-search-result-elsewhere">em outro canal</span>}
+                <p className="chat-search-result-content">{r.content}</p>
+              </div>
+            );
+          })}
         </div>
       )}
       <div className="chat-header">

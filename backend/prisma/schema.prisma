@@ -30,11 +30,26 @@ model Server {
   ownerId    String
   createdAt  DateTime @default(now())
 
-  owner    User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members  ServerMember[]
-  rooms    Room[]
+  owner      User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members    ServerMember[]
+  rooms      Room[]
+  channels   TextChannel[]
+  messages   Message[]
+  categories Category[]
+}
+
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(64)
+  serverId  String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  server   Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
   channels TextChannel[]
-  messages Message[]
+  rooms    Room[]
+
+  @@index([serverId])
 }
 
 model ServerMember {
@@ -52,13 +67,18 @@ model ServerMember {
 }
 
 model Room {
-  id        String   @id @default(cuid())
-  name      String
-  serverId  String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  name       String
+  serverId   String
+  categoryId String?
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
 
-  server  Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
-  members RoomMember[]
+  server   Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  category Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  members  RoomMember[]
+
+  @@index([categoryId])
 }
 
 model RoomMember {
@@ -74,16 +94,20 @@ model RoomMember {
 }
 
 model TextChannel {
-  id        String   @id @default(cuid())
-  name      String
-  serverId  String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  name       String
+  serverId   String
+  categoryId String?
+  position   Int      @default(0)
+  createdAt  DateTime @default(now())
 
   server   Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  category Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   messages Message[]
   reads    ChannelRead[]
 
   @@index([serverId])
+  @@index([categoryId])
 }
 
 model ChannelRead {

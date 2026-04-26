@@ -112,6 +112,16 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
     }
   }
 
+  const usernameError =
+    username.length > 0 && username.length < 3 ? "Mínimo 3 caracteres" :
+    username.length > 32 ? "Máximo 32 caracteres" :
+    !/^[a-zA-Z0-9_]+$/.test(username) ? "Use apenas letras, números e _" : null;
+  const passwordError =
+    newPassword.length > 0 && newPassword.length < 6 ? "Mínimo 6 caracteres" : null;
+  const passwordCurrentError =
+    newPassword.length > 0 && currentPassword.length === 0 ? "Necessário para trocar a senha" : null;
+  const hasError = !!usernameError || !!passwordError || !!passwordCurrentError;
+
   return (
     <div className="settings-section-content">
       <h2 className="settings-section-title">Perfil</h2>
@@ -127,24 +137,48 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
       <form onSubmit={handleSave} className="settings-form">
         <label className="settings-label">
           <span>Nome de usuário</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} minLength={3} maxLength={32} required />
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            minLength={3}
+            maxLength={32}
+            required
+            aria-invalid={!!usernameError}
+          />
+          {usernameError && <span className="settings-field-error">{usernameError}</span>}
         </label>
         <label className="settings-label">
           <span>Status customizado</span>
           <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={128} placeholder="Ex: Em reunião, AFK, Codando..." />
+          <span className="settings-field-hint">{statusText.length}/128</span>
         </label>
         <div className="settings-divider" />
         <h3 className="settings-subsection">Alterar senha</h3>
         <label className="settings-label">
           <span>Senha atual</span>
-          <input type="password" placeholder="Deixe em branco para não alterar" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+          <input
+            type="password"
+            placeholder="Deixe em branco para não alterar"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            aria-invalid={!!passwordCurrentError}
+          />
+          {passwordCurrentError && <span className="settings-field-error">{passwordCurrentError}</span>}
         </label>
         <label className="settings-label">
           <span>Nova senha</span>
-          <input type="password" placeholder="Mínimo 6 caracteres" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} minLength={newPassword ? 6 : undefined} />
+          <input
+            type="password"
+            placeholder="Mínimo 6 caracteres"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            minLength={newPassword ? 6 : undefined}
+            aria-invalid={!!passwordError}
+          />
+          {passwordError && <span className="settings-field-error">{passwordError}</span>}
         </label>
         {msg && <p className={msg.ok ? "settings-success" : "error"}>{msg.text}</p>}
-        <button type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar alterações"}</button>
+        <button type="submit" disabled={saving || hasError}>{saving ? "Salvando..." : "Salvar alterações"}</button>
       </form>
     </div>
   );
@@ -152,6 +186,49 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
 
 /* ── Voz ── */
 function VozSection({ voice }: { voice: ReturnType<typeof useVoice> }) {
+  const [testTrack, setTestTrack] = useState<MediaStreamTrack | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    if (voice.audioDevices.length === 0 && !voice.localMicTrack) {
+      voice.loadAudioDevices();
+    }
+    return () => {
+      if (testTrack) testTrack.stop();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function startTest() {
+    if (testing) return stopTest();
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: voice.selectedDevice ? { exact: voice.selectedDevice } : undefined,
+          noiseSuppression: voice.noiseSuppression,
+          echoCancellation: voice.echoCancellation,
+          autoGainControl: voice.autoGainControl,
+        },
+      });
+      const track = stream.getAudioTracks()[0];
+      setTestTrack(track);
+      setTesting(true);
+    } catch (e) {
+      console.warn("[mic test]", e);
+    }
+  }
+
+  function stopTest() {
+    if (testTrack) {
+      testTrack.stop();
+      setTestTrack(null);
+    }
+    setTesting(false);
+  }
+
+  const activeMicTrack = voice.localMicTrack ?? testTrack;
+  const meterMuted = voice.localMicTrack ? voice.isMuted : false;
+
   return (
     <div className="settings-section-content">
       <h2 className="settings-section-title">Voz</h2>
@@ -159,24 +236,75 @@ function VozSection({ voice }: { voice: ReturnType<typeof useVoice> }) {
       <div className="settings-group">
         <h3 className="settings-subsection">Dispositivo de entrada</h3>
         {voice.audioDevices.length === 0 ? (
-          <p className="settings-hint">Nenhum dispositivo encontrado. Entre em uma sala de voz para carregar os dispositivos.</p>
+          <p className="settings-hint">
+            Nenhum dispositivo carregado.{" "}
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ fontSize: 12, padding: "4px 10px" }}
+              onClick={() => voice.loadAudioDevices()}
+            >
+              Carregar dispositivos
+            </button>
+          </p>
         ) : (
           <select
             className="settings-select"
             value={voice.selectedDevice}
-            onChange={(e) => voice.changeDevice(e.target.value)}
+            onChange={(e) => {
+              if (voice.localMicTrack) voice.changeDevice(e.target.value);
+              else {
+                localStorage.setItem("lobby_mic_device", e.target.value);
+                if (testing) { stopTest(); }
+              }
+            }}
           >
             {voice.audioDevices.map((d) => (
               <option key={d.deviceId} value={d.deviceId}>{d.label || `Microfone ${d.deviceId.slice(0, 8)}`}</option>
             ))}
           </select>
         )}
-        {voice.localMicTrack && (
+        {!voice.localMicTrack && voice.audioDevices.length > 0 && (
+          <button
+            type="button"
+            className="btn-secondary"
+            style={{ marginTop: 8, fontSize: 13 }}
+            onClick={startTest}
+          >
+            <Ico.test /> {testing ? "Parar teste" : "Testar microfone"}
+          </button>
+        )}
+        {activeMicTrack && (
           <div className="settings-mic-meter">
             <span className="settings-hint">Nível do microfone</span>
-            <MicMeter track={voice.localMicTrack} muted={voice.isMuted} />
+            <MicMeter track={activeMicTrack} muted={meterMuted} />
           </div>
         )}
+      </div>
+
+      <div className="settings-group">
+        <h3 className="settings-subsection">Processamento de áudio</h3>
+        <p className="settings-hint">Mudanças passam a valer ao reconectar na sala.</p>
+        <div className="settings-toggles">
+          <ToggleRow
+            label="Supressão de ruído"
+            hint="Remove ruídos de fundo (ventilador, teclado) usando o algoritmo do navegador"
+            value={voice.noiseSuppression}
+            onToggle={() => voice.setNoiseSuppression(!voice.noiseSuppression)}
+          />
+          <ToggleRow
+            label="Cancelamento de eco"
+            hint="Evita que sua voz volte como eco quando outros falam"
+            value={voice.echoCancellation}
+            onToggle={() => voice.setEchoCancellation(!voice.echoCancellation)}
+          />
+          <ToggleRow
+            label="Ganho automático"
+            hint="Normaliza o volume do seu mic — bom se sua voz oscila"
+            value={voice.autoGainControl}
+            onToggle={() => voice.setAutoGainControl(!voice.autoGainControl)}
+          />
+        </div>
       </div>
 
       <div className="settings-group">

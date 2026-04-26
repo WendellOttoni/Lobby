@@ -248,8 +248,8 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
         conn.isAlive = true;
       });
 
-      function sendError(message: string) {
-        socket.send(JSON.stringify({ type: "error", message }));
+      function sendError(message: string, code?: string, retryAfter?: number) {
+        socket.send(JSON.stringify({ type: "error", message, code, retryAfter }));
       }
 
       socket.on("message", async (raw: Buffer) => {
@@ -319,7 +319,8 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             const replyToId = typeof data.replyToId === "string" ? data.replyToId : null;
             stopTyping(serverId, userId, username, channelId);
             if (!consumeToken(conn.bucket)) {
-              sendError("Você está enviando mensagens muito rápido. Aguarde alguns segundos.");
+              const retryAfter = Math.ceil((1 - conn.bucket.tokens) / RATE_REFILL_PER_SEC);
+              sendError("Você está enviando mensagens muito rápido. Aguarde alguns segundos.", "RATE_LIMITED", retryAfter);
               return;
             }
 
