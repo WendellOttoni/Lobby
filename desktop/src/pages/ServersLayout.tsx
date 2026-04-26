@@ -1,18 +1,21 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate, useParams } from "react-router-dom";
+import { Outlet, useLocation, useNavigate, useParams } from "react-router-dom";
 import { onOpenUrl } from "@tauri-apps/plugin-deep-link";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
 import { api, Server } from "../lib/api";
 import { ServerSidebar } from "../components/ServerSidebar";
 import { ServerModal } from "../components/ServerModal";
+import { IncomingCallModal } from "../components/IncomingCallModal";
 import { useVisiblePolling } from "../lib/usePolling";
 
 export function ServersLayout() {
   const { token, user, logout } = useAuth();
   const { isReconnecting, activeRoomName } = useVoice();
   const navigate = useNavigate();
+  const location = useLocation();
   const { serverId } = useParams<{ serverId: string }>();
+  const isOnServersRoot = location.pathname === "/servers" || location.pathname === "/servers/";
   const [servers, setServers] = useState<Server[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [modalInitialCode, setModalInitialCode] = useState<string | undefined>();
@@ -25,7 +28,7 @@ export function ServersLayout() {
       setServers(servers);
       if (!loaded) {
         setLoaded(true);
-        if (!serverId && servers.length > 0) {
+        if (isOnServersRoot && servers.length > 0) {
           navigate(`/servers/${servers[0].id}`, { replace: true });
         }
       }
@@ -105,7 +108,7 @@ export function ServersLayout() {
       />
 
       <div className="app-main">
-        {loaded && servers.length === 0 ? (
+        {loaded && servers.length === 0 && isOnServersRoot ? (
           <div className="no-servers">
             <p>Você não está em nenhum servidor.</p>
             <button onClick={() => setShowModal(true)}>Criar ou entrar em um</button>
@@ -125,6 +128,7 @@ export function ServersLayout() {
         />
       )}
 
+      <IncomingCallModal />
     </div>
   );
 }

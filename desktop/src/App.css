@@ -2483,3 +2483,355 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
   padding: 4px 10px 2px;
 }
+
+/* ============================================
+   DM button in server rail
+   ============================================ */
+.server-rail-btn.dm-btn {
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.server-rail-btn.dm-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.server-rail-icon-wrap.active .server-rail-btn.dm-btn,
+.server-rail-btn.dm-btn:hover {
+  color: var(--text);
+  background: var(--accent);
+}
+
+/* ============================================
+   Friends page
+   ============================================ */
+.friends-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  overflow-y: auto;
+  gap: 20px;
+}
+.friends-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.friends-add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.friends-add-input {
+  flex: 1;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.friends-add-input:focus {
+  border-color: var(--accent);
+}
+.friends-add-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.friends-add-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.friends-add-error {
+  width: 100%;
+  font-size: 12px;
+  color: var(--danger, #e04040);
+}
+.friends-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.friends-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+.friends-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.friends-row.clickable {
+  cursor: pointer;
+}
+.friends-row.clickable:hover {
+  background: var(--surface);
+}
+.friends-row-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+.friends-row-pending {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.friends-row-actions {
+  display: flex;
+  gap: 6px;
+}
+.friends-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.friends-btn.accept {
+  background: var(--accent);
+  color: #fff;
+}
+.friends-btn.decline {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.friends-btn.decline:hover {
+  background: var(--danger, #e04040);
+  color: #fff;
+}
+.friends-btn.chat {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.friends-btn.chat:hover {
+  color: var(--text);
+}
+.friends-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+/* ============================================
+   DM page
+   ============================================ */
+.dm-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.dm-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dm-header-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dm-header-actions {
+  display: flex;
+  gap: 8px;
+}
+.dm-call-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.dm-call-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.dm-call-btn.active {
+  background: var(--danger, #e04040);
+  border-color: transparent;
+  color: #fff;
+}
+.dm-call-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dm-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dm-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+}
+.dm-msg.grouped {
+  padding-left: 42px;
+}
+.dm-msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.dm-msg-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dm-msg-content {
+  font-size: 14px;
+  color: var(--text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.dm-msg-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dm-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dm-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.dm-input:focus {
+  border-color: var(--accent);
+}
+.dm-send-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dm-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ============================================
+   Incoming call modal
+   ============================================ */
+.incoming-call-overlay {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 2000;
+  pointer-events: none;
+}
+.incoming-call-modal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-raised, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  pointer-events: all;
+  animation: slide-in 0.2s ease;
+}
+@keyframes slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.incoming-call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.incoming-call-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.incoming-call-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.incoming-call-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 8px;
+}
+.incoming-call-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.incoming-call-btn.accept {
+  background: #2ecc71;
+  color: #fff;
+}
+.incoming-call-btn.accept:hover {
+  background: #27ae60;
+}
+.incoming-call-btn.decline {
+  background: var(--danger, #e04040);
+  color: #fff;
+}
+.incoming-call-btn.decline:hover {
+  background: #c0392b;
+}

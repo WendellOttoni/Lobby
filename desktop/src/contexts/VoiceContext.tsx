@@ -58,6 +58,7 @@ interface VoiceContextValue {
   echoCancellation: boolean;
   autoGainControl: boolean;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
+  connectDM: (lkToken: string, url: string, roomName: string) => Promise<void>;
   disconnect: () => void;
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
@@ -570,6 +571,90 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(AUTO_GAIN_KEY, String(v));
   }
 
+  async function connectDM(lkToken: string, url: string, roomName: string) {
+    setError(null);
+    if (roomRef.current) {
+      roomRef.current.disconnect();
+      roomRef.current = null;
+    }
+    shouldReconnectRef.current = false;
+    reconnectParamsRef.current = null;
+
+    const room = new Room({ dynacast: true });
+    roomRef.current = room;
+    setActiveServerId(null);
+    setActiveRoomId(null);
+    setActiveRoomName(roomName);
+    setIsMuted(false);
+    userWantsMutedRef.current = false;
+    setConnectionState(ConnectionState.Connecting);
+
+    room
+      .on(RoomEvent.ParticipantConnected, (p: RemoteParticipant) => { applyVolumeTo(p); snapshotRoom(room); })
+      .on(RoomEvent.ParticipantDisconnected, () => snapshotRoom(room))
+      .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, _pub, participant: RemoteParticipant) => {
+        if (track.kind === Track.Kind.Audio) {
+          const el = track.attach();
+          el.volume = volumeRef.current;
+          document.body.appendChild(el);
+          applyVolumeTo(participant);
+        }
+        snapshotRoom(room);
+      })
+      .on(RoomEvent.TrackUnsubscribed, (track: RemoteTrack) => {
+        if (track.kind === Track.Kind.Audio) track.detach().forEach((el) => el.remove());
+        snapshotRoom(room);
+      })
+      .on(RoomEvent.TrackMuted, () => snapshotRoom(room))
+      .on(RoomEvent.TrackUnmuted, () => snapshotRoom(room))
+      .on(RoomEvent.ActiveSpeakersChanged, () => snapshotRoom(room))
+      .on(RoomEvent.ConnectionQualityChanged, (quality: ConnectionQuality, participant: Participant) => {
+        if (participant.identity === room.localParticipant.identity) setLocalQuality(quality);
+        snapshotRoom(room);
+      })
+      .on(RoomEvent.LocalTrackPublished, (pub: LocalTrackPublication) => {
+        if (pub.track?.kind === Track.Kind.Audio) setLocalMicTrack((pub.track as LocalAudioTrack).mediaStreamTrack);
+        snapshotRoom(room);
+      })
+      .on(RoomEvent.LocalTrackUnpublished, (pub: LocalTrackPublication) => {
+        if (pub.track?.kind === Track.Kind.Audio) setLocalMicTrack(null);
+        snapshotRoom(room);
+      })
+      .on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+        setConnectionState(state);
+        if (state === ConnectionState.Connected) { setIsReconnecting(false); snapshotRoom(room); }
+        if (state === ConnectionState.Disconnected && roomRef.current === room) resetState();
+      });
+
+    try {
+      const [localTrack] = await Promise.all([
+        createLocalAudioTrack({
+          noiseSuppression: noiseRef.current,
+          echoCancellation: echoRef.current,
+          autoGainControl: gainRef.current,
+        }),
+        room.connect(url, lkToken),
+      ]);
+
+      if (roomRef.current !== room) { localTrack.stop(); return; }
+
+      room.remoteParticipants.forEach(applyVolumeTo);
+      snapshotRoom(room);
+
+      const [devices] = await Promise.all([
+        Room.getLocalDevices("audioinput"),
+        room.localParticipant.publishTrack(localTrack),
+      ]);
+
+      setAudioDevices(devices);
+      snapshotRoom(room);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao conectar na chamada");
+      resetState();
+      roomRef.current = null;
+    }
+  }
+
   function setPttKey(key: string | null) {
     if (key) localStorage.setItem(PTT_KEY_STORAGE, key);
     else localStorage.removeItem(PTT_KEY_STORAGE);
@@ -595,7 +680,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       volume, audioDevices, selectedDevice, localMicTrack, error,
       nicknames, userVolumes, pttKey, muteKey, deafenKey,
       localQuality, rtt, noiseSuppression, echoCancellation, autoGainControl,
-      connect, disconnect, toggleMute, toggleDeafen, changeDevice, setVolumeAll,
+      connect, connectDM, disconnect, toggleMute, toggleDeafen, changeDevice, setVolumeAll,
       setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
       setNoiseSuppression, setEchoCancellation, setAutoGainControl, loadAudioDevices,
     }}>

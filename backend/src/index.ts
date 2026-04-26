@@ -11,6 +11,8 @@ import unfurlRoutes from "./routes/unfurl.js";
 import channelRoutes from "./routes/channels.js";
 import categoriesRoutes from "./routes/categories.js";
 import pinsRoutes from "./routes/pins.js";
+import friendsRoutes from "./routes/friends.js";
+import dmRoutes from "./routes/dm.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
 import { validateEnv } from "./env.js";
@@ -62,6 +64,8 @@ fastify.register(unfurlRoutes);
 fastify.register(channelRoutes, { prefix: "/servers" });
 fastify.register(categoriesRoutes, { prefix: "/servers" });
 fastify.register(pinsRoutes, { prefix: "/servers" });
+fastify.register(friendsRoutes);
+fastify.register(dmRoutes);
 
 fastify.get("/health", async (_, reply) => {
   const checks: Record<string, "ok" | "fail"> = {};

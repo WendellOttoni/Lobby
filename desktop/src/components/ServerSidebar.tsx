@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useVoice } from "../contexts/VoiceContext";
+import { useDM } from "../contexts/DMContext";
 import { Server } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { LogoMark } from "./LogoMark";
@@ -19,7 +20,9 @@ export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Pr
   const navigate = useNavigate();
   const { serverId } = useParams<{ serverId: string }>();
   const { activeServerId, participants } = useVoice();
+  const { incoming } = useDM();
   const [copied, setCopied] = useState<string | null>(null);
+  const dmActive = !serverId && window.location.pathname.startsWith("/dm");
 
   const someoneSpeaking = participants.some((p) => p.isSpeaking && !p.isMuted);
 
@@ -36,6 +39,22 @@ export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Pr
 
   return (
     <nav className="server-rail">
+      <div className={`server-rail-icon-wrap${dmActive ? " active" : ""}`}>
+        <span className="server-rail-pill" />
+        <button
+          className="server-rail-btn dm-btn"
+          onClick={() => navigate("/dm")}
+          title="Mensagens diretas"
+        >
+          <Ico.users />
+          {incoming.length > 0 && (
+            <span className="server-rail-unread">{incoming.length > 9 ? "9+" : incoming.length}</span>
+          )}
+        </button>
+      </div>
+
+      <div className="server-rail-divider" />
+
       {servers.map((s, idx) => {
         const active = s.id === serverId;
         const voiceHere = activeServerId === s.id;

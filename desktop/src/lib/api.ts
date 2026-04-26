@@ -84,6 +84,37 @@ export interface AuthResponse {
   user: User;
 }
 
+export interface FriendUser {
+  id: string;
+  username: string;
+}
+
+export interface FriendRequest {
+  id: string;
+  from: FriendUser;
+}
+
+export interface OutgoingRequest {
+  id: string;
+  to: FriendUser;
+}
+
+export interface DMMessage {
+  id: string;
+  content: string;
+  createdAt: string;
+  editedAt: string | null;
+  authorId: string;
+  authorName: string;
+  conversationId: string;
+}
+
+export interface CallTokenResponse {
+  token: string;
+  url: string;
+  roomName: string;
+}
+
 export interface SearchResult {
   id: string;
   content: string;
@@ -330,6 +361,37 @@ export const api = {
       `/unfurl?url=${encodeURIComponent(url)}`,
       { token }
     ),
+
+  searchUsers: (token: string, q: string) =>
+    request<{ users: FriendUser[] }>(`/users/search?q=${encodeURIComponent(q)}`, { token }),
+
+  listFriends: (token: string) =>
+    request<{ friends: FriendUser[]; incoming: FriendRequest[]; outgoing: OutgoingRequest[] }>(
+      "/friends",
+      { token }
+    ),
+
+  sendFriendRequest: (token: string, username: string) =>
+    request<{ ok: boolean }>("/friends/request", {
+      method: "POST",
+      token,
+      body: JSON.stringify({ username }),
+    }),
+
+  acceptFriendRequest: (token: string, requestId: string) =>
+    request<{ ok: boolean }>(`/friends/${requestId}/accept`, { method: "POST", token }),
+
+  removeFriend: (token: string, requestId: string) =>
+    request<{ ok: boolean }>(`/friends/${requestId}`, { method: "DELETE", token }),
+
+  getDMMessages: (token: string, userId: string, before?: string) =>
+    request<{ messages: DMMessage[] }>(
+      `/dm/${userId}/messages${before ? `?before=${before}` : ""}`,
+      { token }
+    ),
+
+  getCallToken: (token: string, userId: string) =>
+    request<CallTokenResponse>(`/dm/${userId}/call-token`, { method: "POST", token }),
 };
 
 export { ApiError };
