@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import prisma from "../db/client.js";
+import { canManageServer, getServerRole } from "../services/permissions.js";
 
 const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 
@@ -38,9 +39,9 @@ const categoriesRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId } = request.params as { serverId: string };
       const { name } = request.body as { name: string };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode criar categorias" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para criar categorias" });
 
       const last = await prisma.category.findFirst({
         where: { serverId },
@@ -73,9 +74,9 @@ const categoriesRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId, categoryId } = request.params as { serverId: string; categoryId: string };
       const { name, position } = request.body as { name?: string; position?: number };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode editar categorias" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para editar categorias" });
 
       const cat = await prisma.category.findFirst({ where: { id: categoryId, serverId } });
       if (!cat) return reply.status(404).send({ error: "Categoria não encontrada" });
@@ -98,9 +99,9 @@ const categoriesRoutes: FastifyPluginAsync = async (fastify) => {
     const { sub } = request.user as { sub: string };
     const { serverId, categoryId } = request.params as { serverId: string; categoryId: string };
 
-    const server = await prisma.server.findUnique({ where: { id: serverId } });
-    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode deletar categorias" });
+    const role = await getServerRole(sub, serverId);
+    if (!role) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para deletar categorias" });
 
     const cat = await prisma.category.findFirst({ where: { id: categoryId, serverId } });
     if (!cat) return reply.status(404).send({ error: "Categoria não encontrada" });
@@ -123,9 +124,9 @@ const categoriesRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId, channelId } = request.params as { serverId: string; channelId: string };
       const { categoryId } = request.body as { categoryId: string | null };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode mover canais" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para mover canais" });
 
       if (categoryId) {
         const cat = await prisma.category.findFirst({ where: { id: categoryId, serverId } });
@@ -157,9 +158,9 @@ const categoriesRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId, roomId } = request.params as { serverId: string; roomId: string };
       const { categoryId } = request.body as { categoryId: string | null };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode mover salas" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para mover salas" });
 
       if (categoryId) {
         const cat = await prisma.category.findFirst({ where: { id: categoryId, serverId } });

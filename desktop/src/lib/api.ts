@@ -6,6 +6,7 @@ export interface User {
   email: string;
   createdAt: string;
   statusText?: string | null;
+  avatarUrl?: string | null;
 }
 
 export interface TextChannel {
@@ -49,6 +50,9 @@ export interface Server {
   id: string;
   name: string;
   inviteCode: string;
+  inviteUses?: number;
+  inviteMaxUses?: number | null;
+  inviteExpiresAt?: string | null;
   ownerId: string;
   role: string;
   unreadCount?: number;
@@ -58,6 +62,10 @@ export interface Server {
 export interface ServerPreview {
   id: string;
   name: string;
+  inviteCode?: string;
+  inviteUses?: number;
+  inviteMaxUses?: number | null;
+  inviteExpiresAt?: string | null;
   _count: { members: number };
 }
 
@@ -73,10 +81,47 @@ export interface Room {
 export interface Member {
   id: string;
   username: string;
+  avatarUrl?: string | null;
   role: string;
   online: boolean;
   game: string | null;
   statusText: string | null;
+}
+
+export interface ServerBan {
+  id: string;
+  userId: string;
+  username: string;
+  avatarUrl?: string | null;
+  bannedBy: string;
+  bannedByName: string;
+  reason: string | null;
+  createdAt: string;
+}
+
+export interface ServerAuditLog {
+  id: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  targetId: string | null;
+  targetType: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+}
+
+export interface NotificationPreference {
+  channelId: string | null;
+  muted: boolean;
+}
+
+export interface ChannelPermission {
+  id: string;
+  serverId: string;
+  channelId: string;
+  role: "member" | "admin";
+  canRead: boolean;
+  canWrite: boolean;
 }
 
 export interface AuthResponse {
@@ -209,10 +254,11 @@ export const api = {
   getServer: (token: string, serverId: string) =>
     request<{ server: Server; role: string }>(`/servers/${serverId}`, { token }),
 
-  resetInvite: (token: string, serverId: string) =>
-    request<{ inviteCode: string }>(`/servers/${serverId}/invite/reset`, {
+  resetInvite: (token: string, serverId: string, options?: { maxUses?: number | null; expiresInHours?: number | null }) =>
+    request<{ inviteCode: string; inviteUses: number; inviteMaxUses: number | null; inviteExpiresAt: string | null }>(`/servers/${serverId}/invite/reset`, {
       method: "POST",
       token,
+      body: JSON.stringify(options ?? {}),
     }),
 
   listRooms: (token: string, serverId: string) =>
@@ -231,7 +277,7 @@ export const api = {
       token,
     }),
 
-  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string; statusText?: string | null }) =>
+  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string; statusText?: string | null; avatarUrl?: string | null }) =>
     request<{ user: User }>("/auth/me", {
       method: "PATCH",
       token,
@@ -263,6 +309,22 @@ export const api = {
 
   deleteChannel: (token: string, serverId: string, channelId: string) =>
     request<void>(`/servers/${serverId}/channels/${channelId}`, { method: "DELETE", token }),
+
+  listChannelPermissions: (token: string, serverId: string, channelId: string) =>
+    request<{ permissions: ChannelPermission[] }>(`/servers/${serverId}/channels/${channelId}/permissions`, { token }),
+
+  setChannelPermission: (
+    token: string,
+    serverId: string,
+    channelId: string,
+    role: "member" | "admin",
+    permission: { canRead: boolean; canWrite: boolean }
+  ) =>
+    request<{ permission: ChannelPermission }>(`/servers/${serverId}/channels/${channelId}/permissions/${role}`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify(permission),
+    }),
 
   renameRoom: (token: string, serverId: string, roomId: string, name: string) =>
     request<{ room: Room }>(`/servers/${serverId}/rooms/${roomId}`, {
@@ -348,12 +410,54 @@ export const api = {
   markServerRead: (token: string, serverId: string) =>
     request<void>(`/servers/${serverId}/read`, { method: "POST", token }),
 
+  listNotificationPreferences: (token: string, serverId: string) =>
+    request<{ preferences: NotificationPreference[] }>(`/servers/${serverId}/notification-preferences`, { token }),
+
+  setNotificationPreference: (token: string, serverId: string, channelId: string | null, muted: boolean) =>
+    request<void>(`/servers/${serverId}/notification-preferences`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify({ channelId, muted }),
+    }),
+
   transferOwnership: (token: string, serverId: string, userId: string) =>
     request<void>(`/servers/${serverId}/transfer`, {
       method: "POST",
       token,
       body: JSON.stringify({ userId }),
     }),
+
+  setMemberRole: (token: string, serverId: string, userId: string, role: "admin" | "member") =>
+    request<{ member: Pick<Member, "id" | "username" | "role"> }>(
+      `/servers/${serverId}/members/${userId}/role`,
+      {
+        method: "PATCH",
+        token,
+        body: JSON.stringify({ role }),
+      }
+    ),
+
+  kickMember: (token: string, serverId: string, userId: string) =>
+    request<void>(`/servers/${serverId}/members/${userId}/kick`, {
+      method: "POST",
+      token,
+    }),
+
+  banMember: (token: string, serverId: string, userId: string, reason?: string) =>
+    request<void>(`/servers/${serverId}/members/${userId}/ban`, {
+      method: "POST",
+      token,
+      body: JSON.stringify({ reason }),
+    }),
+
+  listBans: (token: string, serverId: string) =>
+    request<{ bans: ServerBan[] }>(`/servers/${serverId}/bans`, { token }),
+
+  unbanMember: (token: string, serverId: string, userId: string) =>
+    request<void>(`/servers/${serverId}/bans/${userId}`, { method: "DELETE", token }),
+
+  listAuditLogs: (token: string, serverId: string) =>
+    request<{ logs: ServerAuditLog[] }>(`/servers/${serverId}/audit`, { token }),
 
   searchMessages: (token: string, serverId: string, q: string) =>
     request<{ results: SearchResult[] }>(

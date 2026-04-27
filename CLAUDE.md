@@ -16,6 +16,10 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 - Listagem dos servidores do usuário
 - Salas de voz dentro de cada servidor (CRUD)
 - Transferência de propriedade, reset de convite, sair/deletar servidor
+- Cargos básicos `owner`, `admin` e `member`
+- Kick/ban e bloqueio de reentrada de usuário banido
+- Convites com expiração, limite de usos e contador
+- Tela de administração com banidos, desbanimento, auditoria e permissões por canal
 
 **Voz**
 - Entrada/saída de salas com WebRTC via LiveKit
@@ -31,6 +35,7 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 - Chat por servidor via WebSocket com persistência em PostgreSQL
 - Canais de texto, categorias, histórico, paginação, busca, typing indicator
 - Edição, exclusão, replies, reações, pins e anexos
+- Preferência persistida para silenciar servidor/canal, com cache local no desktop
 
 **Amigos e DM**
 - Solicitações de amizade
@@ -42,6 +47,7 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 - Tray icon com menu "Abrir" e "Sair"
 - Auto-updater: verifica ao iniciar + botão manual em Settings
 - Settings modal: editar conta + verificar atualizações
+- Upload de avatar real no perfil
 - CI publica nova release a cada push no `main` (tag `v0.1.N`)
 
 **Extras pós-MVP**
@@ -54,7 +60,7 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 
 ## O que NÃO entra (fora de escopo atual)
 
-Permissões avançadas, moderação, banimento, bots, notificações push e múltiplas instâncias do backend.
+Bots, notificações push e múltiplas instâncias do backend.
 
 ## Stack
 
@@ -124,6 +130,7 @@ lobby/
 - `User` — id, username, email, passwordHash, statusText
 - `Server` — id, name, inviteCode, ownerId
 - `ServerMember` — userId + serverId + role (unique pair)
+- `ServerBan` — bloqueio de reentrada por servidor
 - `Category` — agrupamento e ordenação de canais/salas
 - `TextChannel` — canais de texto por servidor
 - `Room` — id, name, serverId, categoryId, position

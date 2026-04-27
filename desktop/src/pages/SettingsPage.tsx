@@ -87,6 +87,7 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
   const [statusText, setStatusText] = useState(user?.statusText ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -112,6 +113,26 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
     }
   }
 
+  async function handleAvatar(file: File | undefined) {
+    if (!token || !file) return;
+    setAvatarUploading(true);
+    setMsg(null);
+    try {
+      const uploaded = await api.uploadFile(token, file);
+      if (!uploaded.mimeType.startsWith("image/")) {
+        setMsg({ ok: false, text: "Escolha uma imagem." });
+        return;
+      }
+      const { user: updated } = await api.updateMe(token, { avatarUrl: uploaded.url });
+      setUser(updated as User);
+      setMsg({ ok: true, text: "Avatar atualizado." });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : "Erro ao enviar avatar" });
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   const usernameError =
     username.length > 0 && username.length < 3 ? "Mínimo 3 caracteres" :
     username.length > 32 ? "Máximo 32 caracteres" :
@@ -127,10 +148,20 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
       <h2 className="settings-section-title">Perfil</h2>
 
       <div className="settings-avatar-row">
-        {user && <Avatar name={user.username} id={user.id} size={72} />}
+        {user && <Avatar name={user.username} id={user.id} src={user.avatarUrl} size={72} />}
         <div className="settings-avatar-info">
           <div className="settings-avatar-name">{user?.username}</div>
           <div className="settings-avatar-email">{user?.email}</div>
+          <label className="btn-secondary" style={{ marginTop: 8, display: "inline-flex", cursor: "pointer" }}>
+            {avatarUploading ? "Enviando..." : "Alterar avatar"}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              style={{ display: "none" }}
+              disabled={avatarUploading}
+              onChange={(e) => handleAvatar(e.target.files?.[0])}
+            />
+          </label>
         </div>
       </div>
 

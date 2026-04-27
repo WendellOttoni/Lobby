@@ -1,5 +1,6 @@
 import { FastifyPluginAsync } from "fastify";
 import prisma from "../db/client.js";
+import { canManageServer, getServerRole } from "../services/permissions.js";
 
 const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
 
@@ -53,9 +54,9 @@ const pinsRoutes: FastifyPluginAsync = async (fastify) => {
       const { sub } = request.user as { sub: string };
       const { serverId, messageId } = request.params as { serverId: string; messageId: string };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode fixar" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para fixar" });
 
       const msg = await prisma.message.findUnique({ where: { id: messageId } });
       if (!msg || msg.serverId !== serverId) return reply.status(404).send({ error: "Mensagem não encontrada" });
@@ -77,9 +78,9 @@ const pinsRoutes: FastifyPluginAsync = async (fastify) => {
       const { sub } = request.user as { sub: string };
       const { serverId, messageId } = request.params as { serverId: string; messageId: string };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode desfixar" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para desfixar" });
 
       const pin = await prisma.messagePin.findUnique({ where: { messageId } });
       if (!pin || pin.serverId !== serverId) return reply.status(404).send({ error: "Pin não encontrado" });

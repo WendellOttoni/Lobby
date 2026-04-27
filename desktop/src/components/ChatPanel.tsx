@@ -26,6 +26,7 @@ interface Props {
   onOpenPins?: () => void;
   onChannelMessage?: (channelId: string | null, authorId: string) => void;
   membersVisible?: boolean;
+  muted?: boolean;
 }
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
@@ -47,6 +48,7 @@ export function ChatPanel({
   onOpenPins,
   onChannelMessage,
   membersVisible,
+  muted = false,
 }: Props) {
   const onChannelMessageRef = useRef(onChannelMessage);
   useEffect(() => { onChannelMessageRef.current = onChannelMessage; }, [onChannelMessage]);
@@ -278,7 +280,9 @@ export function ChatPanel({
             if (msg.channelId === activeChannelId) {
               scheduleMarkRead();
               const mentioned = msg.content.includes(`@${currentUsernameRef.current}`);
-              if (document.hidden || mentioned) playMessageSound();
+              if (!muted || mentioned) {
+                if (document.hidden || mentioned) playMessageSound();
+              }
               if (mentioned && isMentionNotifyEnabled() && (document.hidden || !isAtBottomRef.current)) {
                 notify(
                   `Nova menção — #${channelIdRef.current ?? "geral"}`,

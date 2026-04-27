@@ -12,14 +12,16 @@ import { WaveBars } from "../components/WaveBars";
 import { Ico } from "../components/icons";
 import { ParticipantContextMenu } from "../components/ParticipantContextMenu";
 import { PinsModal } from "../components/PinsModal";
-import { ItemContextMenu, ItemMenuState, TransferModal } from "../components/ServerModals";
+import { ItemContextMenu, ItemMenuState, ServerAdminModal, TransferModal } from "../components/ServerModals";
 import { ScreenShareView } from "../components/ScreenShareView";
 import { useVisiblePolling } from "../lib/usePolling";
+import { isChannelMuted, isServerMuted, setChannelMuted, setServerMuted } from "../lib/mute";
 
 const COLLAPSED_KEY_PREFIX = "lobby_cat_collapsed_";
 
 interface ServerDataSnapshot {
   server: Server;
+  role: string;
   rooms: Room[];
   channels: TextChannel[];
   categories: Category[];
@@ -55,6 +57,7 @@ export function ServerPage() {
   }, [screenShareCount > 0]);
 
   const [server, setServer] = useState<Server | null>(null);
+  const [currentRole, setCurrentRole] = useState("member");
   const [rooms, setRooms] = useState<Room[]>([]);
   const [channels, setChannels] = useState<TextChannel[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -82,8 +85,11 @@ export function ServerPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
+  const [inviteMaxUses, setInviteMaxUses] = useState("");
+  const [inviteExpiresHours, setInviteExpiresHours] = useState("");
   const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{
     identity: string;
     name: string;
@@ -92,14 +98,36 @@ export function ServerPage() {
   } | null>(null);
   const [itemMenu, setItemMenu] = useState<ItemMenuState | null>(null);
   const [activeView, setActiveView] = useState<"chat" | "screenshare">("chat");
+  const [serverMuted, setServerMutedState] = useState(false);
+  const [mutedChannelKeys, setMutedChannelKeys] = useState(0);
 
   const isOwner = server?.ownerId === user?.id;
+  const canManageServer = isOwner || currentRole === "admin";
   const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!serverId) return;
     setCollapsedCategories(loadCollapsed(serverId));
+    setServerMutedState(isServerMuted(serverId));
+    setMutedChannelKeys((n) => n + 1);
   }, [serverId]);
+
+  useEffect(() => {
+    if (!token || !serverId) return;
+    let cancelled = false;
+    api.listNotificationPreferences(token, serverId)
+      .then(({ preferences }) => {
+        if (cancelled) return;
+        for (const pref of preferences) {
+          if (pref.channelId === null) setServerMuted(serverId, pref.muted);
+          else setChannelMuted(serverId, pref.channelId, pref.muted);
+        }
+        setServerMutedState(isServerMuted(serverId));
+        setMutedChannelKeys((n) => n + 1);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token, serverId]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -143,6 +171,7 @@ export function ServerPage() {
     const cached = serverDataCache.get(serverId);
     if (cached) {
       setServer(cached.server);
+      setCurrentRole(cached.role);
       setRooms(cached.rooms);
       setChannels(cached.channels);
       setCategories(cached.categories);
@@ -160,8 +189,9 @@ export function ServerPage() {
       api.listChannels(token, serverId),
       api.listCategories(token, serverId).catch(() => ({ categories: [] as Category[] })),
     ])
-      .then(([{ server }, { rooms }, { channels, generalUnread }, { categories }]) => {
+      .then(([{ server, role }, { rooms }, { channels, generalUnread }, { categories }]) => {
         setServer(server);
+        setCurrentRole(role);
         setRooms(rooms);
         setChannels(channels);
         setCategories(categories);
@@ -169,7 +199,7 @@ export function ServerPage() {
         setInviteCode(server.inviteCode);
         setError(null);
         serverDataCache.set(serverId, {
-          server, rooms, channels, categories, generalUnread, inviteCode: server.inviteCode,
+          server, role, rooms, channels, categories, generalUnread, inviteCode: server.inviteCode,
         });
       })
       .catch((err) => setError(err instanceof Error ? err.message : "Erro"))
@@ -224,6 +254,7 @@ export function ServerPage() {
   function onChannelMessage(channelId: string | null, authorId: string) {
     if (authorId === user?.id) return;
     if (channelId === currentChannelId) return;
+    if (serverId && (serverMuted || isChannelMuted(serverId, channelId))) return;
     if (channelId === null) {
       setGeneralUnread((n) => n + 1);
     } else {
@@ -231,6 +262,22 @@ export function ServerPage() {
         prev.map((c) => (c.id === channelId ? { ...c, unreadCount: (c.unreadCount ?? 0) + 1 } : c))
       );
     }
+  }
+
+  function toggleServerMuted() {
+    if (!serverId) return;
+    const next = !serverMuted;
+    setServerMuted(serverId, next);
+    setServerMutedState(next);
+    if (token) api.setNotificationPreference(token, serverId, null, next).catch(() => {});
+  }
+
+  function toggleCurrentChannelMuted() {
+    if (!serverId) return;
+    const next = !isChannelMuted(serverId, currentChannelId);
+    setChannelMuted(serverId, currentChannelId, next);
+    setMutedChannelKeys((n) => n + 1);
+    if (token) api.setNotificationPreference(token, serverId, currentChannelId, next).catch(() => {});
   }
 
   function patchCache(serverId: string, patch: Partial<ServerDataSnapshot>) {
@@ -400,8 +447,19 @@ export function ServerPage() {
   async function handleResetInvite() {
     if (!token || !serverId) return;
     try {
-      const { inviteCode: newCode } = await api.resetInvite(token, serverId);
+      const invite = await api.resetInvite(token, serverId, {
+        maxUses: inviteMaxUses.trim() ? Number(inviteMaxUses) : null,
+        expiresInHours: inviteExpiresHours.trim() ? Number(inviteExpiresHours) : null,
+      });
+      const newCode = invite.inviteCode;
       setInviteCode(newCode);
+      setServer((prev) => prev ? {
+        ...prev,
+        inviteCode: newCode,
+        inviteUses: invite.inviteUses,
+        inviteMaxUses: invite.inviteMaxUses,
+        inviteExpiresAt: invite.inviteExpiresAt,
+      } : prev);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao resetar convite");
     }
@@ -425,8 +483,9 @@ export function ServerPage() {
     try {
       await api.transferOwnership(token, serverId, newOwnerId);
       setShowTransfer(false);
-      const [{ server: s }] = await Promise.all([api.getServer(token, serverId)]);
+      const [{ server: s, role }] = await Promise.all([api.getServer(token, serverId)]);
       setServer(s);
+      setCurrentRole(role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao transferir");
     }
@@ -482,6 +541,9 @@ export function ServerPage() {
 
   const currentChannel = channels.find((c) => c.id === currentChannelId) ?? null;
   const activeChannelName = currentChannel?.name ?? "geral";
+  const currentChannelMuted = serverId ? isChannelMuted(serverId, currentChannelId) : false;
+  const effectiveMuted = serverMuted || currentChannelMuted;
+  void mutedChannelKeys;
 
   if (loading && !server) {
     return <div className="server-loading">Carregando...</div>;
@@ -496,7 +558,7 @@ export function ServerPage() {
         key={c.id}
         className={`channel-row${currentChannelId === c.id ? " active" : ""}${showBadge ? " unread" : ""}`}
         onClick={() => !isEditing && switchChannel(c.id)}
-        onContextMenu={isOwner ? (e) => {
+        onContextMenu={canManageServer ? (e) => {
           e.preventDefault();
           setItemMenu({ type: "channel", id: c.id, x: e.clientX, y: e.clientY });
         } : undefined}
@@ -523,7 +585,7 @@ export function ServerPage() {
           {showBadge && !isEditing && (
             <span className="channel-row-unread">{unread > 99 ? "99+" : unread}</span>
           )}
-          {isOwner && !isEditing && (
+          {canManageServer && !isEditing && (
             <button
               className="channel-row-menu-btn"
               title="Opções do canal"
@@ -552,7 +614,7 @@ export function ServerPage() {
         key={room.id}
         className={`channel-row${isActive ? " active" : ""}`}
         onClick={() => !isActive && !isEditing && handleEnterRoom(room)}
-        onContextMenu={isOwner ? (e) => {
+        onContextMenu={canManageServer ? (e) => {
           e.preventDefault();
           setItemMenu({ type: "room", id: room.id, x: e.clientX, y: e.clientY });
         } : undefined}
@@ -590,7 +652,7 @@ export function ServerPage() {
               <span className="channel-row-join">Entrar</span>
             )
           )}
-          {isOwner && !isEditing && (
+          {canManageServer && !isEditing && (
             <button
               className="channel-row-menu-btn"
               title="Opções da sala"
@@ -666,7 +728,7 @@ export function ServerPage() {
         {(isCustomCategory || (catId === null && categories.length > 0)) && (
           <div
             className="rooms-section-label"
-            onContextMenu={isOwner && cat ? (e) => {
+            onContextMenu={canManageServer && cat ? (e) => {
               e.preventDefault();
               setItemMenu({ type: "category", id: cat.id, x: e.clientX, y: e.clientY });
             } : undefined}
@@ -697,7 +759,7 @@ export function ServerPage() {
                 label
               )}
             </button>
-            {isOwner && cat && (
+            {canManageServer && cat && (
               <button
                 className="rooms-section-add"
                 onClick={(e) => {
@@ -760,7 +822,13 @@ export function ServerPage() {
                 >
                   Convite
                 </button>
-                {isOwner && (
+                <button
+                  className="btn-secondary"
+                  onClick={() => { toggleServerMuted(); setMenuOpen(false); }}
+                >
+                  {serverMuted ? "Ativar notificações" : "Silenciar servidor"}
+                </button>
+                {canManageServer && (
                   <>
                     <button
                       className="btn-secondary"
@@ -782,10 +850,18 @@ export function ServerPage() {
                     </button>
                     <button
                       className="btn-secondary"
-                      onClick={() => { setShowTransfer(true); setMenuOpen(false); }}
+                      onClick={() => { setShowAdmin(true); setMenuOpen(false); }}
                     >
-                      Transferir servidor
+                      Administração
                     </button>
+                    {isOwner && (
+                      <button
+                        className="btn-secondary"
+                        onClick={() => { setShowTransfer(true); setMenuOpen(false); }}
+                      >
+                        Transferir servidor
+                      </button>
+                    )}
                   </>
                 )}
                 {isOwner ? (
@@ -826,6 +902,10 @@ export function ServerPage() {
             <div className="invite-box">
               <span style={{ color: "var(--text-dim)" }}>Código de convite:</span>
               <code>{inviteCode}</code>
+              <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
+                Usos: {server?.inviteUses ?? 0}{server?.inviteMaxUses ? `/${server.inviteMaxUses}` : ""}
+                {server?.inviteExpiresAt ? ` · expira em ${new Date(server.inviteExpiresAt).toLocaleString("pt-BR")}` : ""}
+              </span>
               <div className="invite-box-actions">
                 <button
                   onClick={() => copy(inviteCode, "Código copiado!")}
@@ -839,13 +919,33 @@ export function ServerPage() {
                 >
                   Copiar link
                 </button>
+                <button
+                  onClick={toggleCurrentChannelMuted}
+                  className="btn-secondary"
+                >
+                  {currentChannelMuted ? "Ativar canal" : "Silenciar canal"}
+                </button>
                 {isOwner && (
-                  <button
-                    onClick={handleResetInvite}
-                    className="btn-danger-outline"
-                  >
-                    Resetar
-                  </button>
+                  <>
+                    <input
+                      value={inviteMaxUses}
+                      onChange={(e) => setInviteMaxUses(e.target.value.replace(/\D/g, ""))}
+                      placeholder="Usos máx."
+                      style={{ width: 90 }}
+                    />
+                    <input
+                      value={inviteExpiresHours}
+                      onChange={(e) => setInviteExpiresHours(e.target.value.replace(/\D/g, ""))}
+                      placeholder="Expira h"
+                      style={{ width: 90 }}
+                    />
+                    <button
+                      onClick={handleResetInvite}
+                      className="btn-danger-outline"
+                    >
+                      Resetar
+                    </button>
+                  </>
                 )}
                 {copiedMsg && (
                   <span className="invite-box-confirm">{copiedMsg}</span>
@@ -935,7 +1035,7 @@ export function ServerPage() {
 
           {filteredRooms.length === 0 && filteredChannels.length === 0 && !search && categories.length === 0 && (
             <p style={{ padding: "14px 10px", fontSize: 12, color: "var(--text-muted)" }}>
-              {isOwner ? "Crie uma categoria, canal ou sala pelo menu ⋯" : "Sem canais ou salas ainda."}
+              {canManageServer ? "Crie uma categoria, canal ou sala pelo menu ⋯" : "Sem canais ou salas ainda."}
             </p>
           )}
         </div>
@@ -974,13 +1074,14 @@ export function ServerPage() {
             token={token}
             currentUserId={user.id}
             currentUsername={user.username}
-            isOwner={isOwner}
+            isOwner={canManageServer}
             channelId={currentChannelId}
             channelName={activeChannelName}
             onToggleMembers={() => setShowMembers((v) => !v)}
             onOpenPins={() => setShowPins(true)}
             onChannelMessage={onChannelMessage}
             membersVisible={showMembers}
+            muted={effectiveMuted}
           />
         )}
       </div>
@@ -989,14 +1090,19 @@ export function ServerPage() {
         <PinsModal
           token={token}
           serverId={serverId}
-          isOwner={isOwner}
+          isOwner={canManageServer}
           onClose={() => setShowPins(false)}
         />
       )}
 
       {/* ── Members ── */}
       {showMembers && token && serverId && (
-        <MemberList serverId={serverId} token={token} />
+        <MemberList
+          serverId={serverId}
+          token={token}
+          currentUserId={user?.id ?? ""}
+          currentUserRole={isOwner ? "owner" : currentRole}
+        />
       )}
 
       {showTransfer && token && serverId && user && (
@@ -1006,6 +1112,14 @@ export function ServerPage() {
           currentUserId={user.id}
           onTransfer={handleTransferOwnership}
           onClose={() => setShowTransfer(false)}
+        />
+      )}
+
+      {showAdmin && token && serverId && (
+        <ServerAdminModal
+          token={token}
+          serverId={serverId}
+          onClose={() => setShowAdmin(false)}
         />
       )}
 

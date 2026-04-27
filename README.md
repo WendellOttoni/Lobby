@@ -23,6 +23,11 @@
 - **Servidores e salas** — crie servidores privados, convide pessoas por link (`lobby://join/CODIGO`)
 - **Chat de texto** por servidor com canais, histórico, busca, respostas, reações, pins e anexos
 - **Amigos e DMs** — solicitações de amizade, mensagens diretas e chamadas de voz privadas
+- **Moderação e auditoria** — admins, expulsão, banimento, desbanimento, log administrativo e remoção de mensagens
+- **Permissões por canal** — regras por cargo para ver e enviar em canais de texto
+- **Convites avançados** — reset com expiração e limite de usos
+- **Avatares reais** — upload de imagem no perfil
+- **Silenciar servidor/canal** — preferências persistidas com cache local
 - **Compartilhamento de tela** em salas de voz
 - **Overlay de voz** sempre no topo com participantes da sala
 - **Push-to-talk global** — segure uma tecla configurável e fale sem abrir o app

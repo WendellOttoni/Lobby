@@ -11,7 +11,7 @@ import { avatarBg } from "../lib/avatar";
 interface Props {
   servers: Server[];
   onAdd: () => void;
-  user: { username: string; id: string } | null;
+  user: { username: string; id: string; avatarUrl?: string | null } | null;
   onLogout: () => void;
   onSettings: () => void;
 }
@@ -112,7 +112,7 @@ export function ServerSidebar({ servers, onAdd, user, onLogout, onSettings }: Pr
 
       <div className="server-rail-footer">
         <div className="server-rail-user" title={user?.username ?? ""}>
-          {user && <Avatar name={user.username} id={user.id} size={38} />}
+          {user && <Avatar name={user.username} id={user.id} src={user.avatarUrl} size={38} />}
           <span className="server-rail-user-dot" />
         </div>
         <div className="server-rail-actions">

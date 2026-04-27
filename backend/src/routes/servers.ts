@@ -4,6 +4,8 @@ import { randomBytes } from "node:crypto";
 import prisma from "../db/client.js";
 import { getRoomService } from "../services/livekit.js";
 import { isOnline, getPresence } from "../services/presence.js";
+import { canManageServer, canReadChannel, getServerRole } from "../services/permissions.js";
+import { recordServerAudit } from "../services/audit.js";
 
 const CODE_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
 
@@ -26,6 +28,10 @@ async function uniqueInviteCode(): Promise<string> {
 }
 
 const mutateLimit = { rateLimit: { max: 20, timeWindow: "1 minute" } };
+
+function notificationScope(channelId?: string | null) {
+  return channelId ? `channel:${channelId}` : "server";
+}
 
 interface SearchFilters {
   text: string;
@@ -76,6 +82,9 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
             id: true,
             name: true,
             inviteCode: true,
+            inviteUses: true,
+            inviteMaxUses: true,
+            inviteExpiresAt: true,
             ownerId: true,
             _count: { select: { members: true, rooms: true } },
           },
@@ -129,6 +138,51 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     return reply.status(204).send();
   });
 
+  fastify.get("/:serverId/notification-preferences", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+      select: { id: true },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    const preferences = await prisma.notificationPreference.findMany({
+      where: { userId: sub, serverId },
+      select: { channelId: true, muted: true },
+    });
+
+    return reply.send({ preferences });
+  });
+
+  fastify.put("/:serverId/notification-preferences", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+    const { channelId, muted } = (request.body ?? {}) as { channelId?: string | null; muted?: boolean };
+
+    if (typeof muted !== "boolean") return reply.status(400).send({ error: "muted obrigatório" });
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+      select: { id: true },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    if (channelId) {
+      const channel = await prisma.textChannel.findFirst({ where: { id: channelId, serverId }, select: { id: true } });
+      if (!channel) return reply.status(404).send({ error: "Canal não encontrado" });
+    }
+
+    await prisma.notificationPreference.upsert({
+      where: { userId_serverId_scopeKey: { userId: sub, serverId, scopeKey: notificationScope(channelId) } },
+      create: { userId: sub, serverId, channelId: channelId ?? null, scopeKey: notificationScope(channelId), muted },
+      update: { muted },
+    });
+
+    return reply.status(204).send();
+  });
+
   // Create server
   fastify.post("/", {
     config: mutateLimit,
@@ -147,10 +201,19 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
         data: {
           name,
           inviteCode: await uniqueInviteCode(),
+          inviteUses: 0,
           ownerId: sub,
           members: { create: { userId: sub, role: "owner" } },
         },
-        select: { id: true, name: true, inviteCode: true, ownerId: true },
+        select: {
+          id: true,
+          name: true,
+          inviteCode: true,
+          inviteUses: true,
+          inviteMaxUses: true,
+          inviteExpiresAt: true,
+          ownerId: true,
+        },
       });
 
       return reply.status(201).send({ server });
@@ -166,11 +229,21 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       select: {
         id: true,
         name: true,
+        inviteCode: true,
+        inviteUses: true,
+        inviteMaxUses: true,
+        inviteExpiresAt: true,
         _count: { select: { members: true } },
       },
     });
 
     if (!server) return reply.status(404).send({ error: "Convite inválido" });
+    if (server.inviteExpiresAt && server.inviteExpiresAt.getTime() < Date.now()) {
+      return reply.status(410).send({ error: "Convite expirado" });
+    }
+    if (server.inviteMaxUses !== null && server.inviteUses >= server.inviteMaxUses) {
+      return reply.status(410).send({ error: "Convite esgotado" });
+    }
     return reply.send({ server });
   });
 
@@ -181,15 +254,34 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
     const server = await prisma.server.findUnique({ where: { inviteCode: code } });
     if (!server) return reply.status(404).send({ error: "Convite inválido" });
+    if (server.inviteExpiresAt && server.inviteExpiresAt.getTime() < Date.now()) {
+      return reply.status(410).send({ error: "Convite expirado" });
+    }
+    if (server.inviteMaxUses !== null && server.inviteUses >= server.inviteMaxUses) {
+      return reply.status(410).send({ error: "Convite esgotado" });
+    }
+
+    const ban = await prisma.serverBan.findUnique({
+      where: { userId_serverId: { userId: sub, serverId: server.id } },
+      select: { id: true },
+    });
+    if (ban) return reply.status(403).send({ error: "Você está banido deste servidor" });
 
     const existing = await prisma.serverMember.findUnique({
       where: { userId_serverId: { userId: sub, serverId: server.id } },
     });
     if (existing) return reply.send({ server, alreadyMember: true });
 
-    await prisma.serverMember.create({
-      data: { userId: sub, serverId: server.id, role: "member" },
-    });
+    await prisma.$transaction([
+      prisma.serverMember.create({
+        data: { userId: sub, serverId: server.id, role: "member" },
+      }),
+      prisma.server.update({
+        where: { id: server.id },
+        data: { inviteUses: { increment: 1 } },
+      }),
+    ]);
+    await recordServerAudit(server.id, sub, "member.join", { targetId: sub, targetType: "user" });
 
     return reply.status(201).send({ server });
   });
@@ -206,7 +298,15 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
     const server = await prisma.server.findUnique({
       where: { id: serverId },
-      select: { id: true, name: true, inviteCode: true, ownerId: true },
+      select: {
+        id: true,
+        name: true,
+        inviteCode: true,
+        inviteUses: true,
+        inviteMaxUses: true,
+        inviteExpiresAt: true,
+        ownerId: true,
+      },
     });
     if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
 
@@ -255,6 +355,11 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
         data: { role: "member" },
       }),
     ]);
+    await recordServerAudit(serverId, sub, "server.transfer", {
+      targetId: newOwnerId,
+      targetType: "user",
+      metadata: { previousOwnerId: sub },
+    });
 
     return reply.status(204).send();
   });
@@ -271,6 +376,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     await prisma.serverMember.delete({
       where: { userId_serverId: { userId: sub, serverId } },
     });
+    await recordServerAudit(serverId, sub, "member.leave", { targetId: sub, targetType: "user" });
 
     return reply.status(204).send();
   });
@@ -284,13 +390,42 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
     if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode resetar o convite" });
 
+    const { maxUses, expiresInHours } = (request.body ?? {}) as {
+      maxUses?: number | null;
+      expiresInHours?: number | null;
+    };
+
+    const safeMaxUses =
+      typeof maxUses === "number" && Number.isFinite(maxUses) && maxUses > 0
+        ? Math.min(Math.floor(maxUses), 10_000)
+        : null;
+    const safeExpiresAt =
+      typeof expiresInHours === "number" && Number.isFinite(expiresInHours) && expiresInHours > 0
+        ? new Date(Date.now() + Math.min(Math.floor(expiresInHours), 24 * 365) * 60 * 60 * 1000)
+        : null;
+
     const updated = await prisma.server.update({
       where: { id: serverId },
-      data: { inviteCode: await uniqueInviteCode() },
-      select: { inviteCode: true },
+      data: {
+        inviteCode: await uniqueInviteCode(),
+        inviteUses: 0,
+        inviteMaxUses: safeMaxUses,
+        inviteExpiresAt: safeExpiresAt,
+      },
+      select: { inviteCode: true, inviteUses: true, inviteMaxUses: true, inviteExpiresAt: true },
+    });
+    await recordServerAudit(serverId, sub, "invite.reset", {
+      targetId: serverId,
+      targetType: "invite",
+      metadata: { maxUses: safeMaxUses, expiresAt: safeExpiresAt?.toISOString() ?? null },
     });
 
-    return reply.send({ inviteCode: updated.inviteCode });
+    return reply.send({
+      inviteCode: updated.inviteCode,
+      inviteUses: updated.inviteUses,
+      inviteMaxUses: updated.inviteMaxUses,
+      inviteExpiresAt: updated.inviteExpiresAt?.toISOString() ?? null,
+    });
   });
 
   // List rooms in server
@@ -336,10 +471,9 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId } = request.params as { serverId: string };
       const { name } = request.body as { name: string };
 
-      const member = await prisma.serverMember.findUnique({
-        where: { userId_serverId: { userId: sub, serverId } },
-      });
-      if (!member) return reply.status(403).send({ error: "Sem acesso" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para criar salas" });
 
       const room = await prisma.room.create({
         data: { name, serverId },
@@ -350,7 +484,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
-  // Rename room (owner only)
+  // Rename room (admin/owner only)
   fastify.patch("/:serverId/rooms/:roomId", {
     config: mutateLimit,
     schema: {
@@ -365,9 +499,9 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       const { serverId, roomId } = request.params as { serverId: string; roomId: string };
       const { name } = request.body as { name: string };
 
-      const server = await prisma.server.findUnique({ where: { id: serverId } });
-      if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-      if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode renomear salas" });
+      const role = await getServerRole(sub, serverId);
+      if (!role) return reply.status(403).send({ error: "Sem acesso" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para renomear salas" });
 
       const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
       if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
@@ -416,14 +550,14 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     });
   });
 
-  // Delete room (owner only)
+  // Delete room (admin/owner only)
   fastify.delete("/:serverId/rooms/:roomId", async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId, roomId } = request.params as { serverId: string; roomId: string };
 
-    const server = await prisma.server.findUnique({ where: { id: serverId } });
-    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
-    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode deletar salas" });
+    const role = await getServerRole(sub, serverId);
+    if (!role) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para deletar salas" });
 
     const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
     if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
@@ -444,7 +578,7 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
 
     const members = await prisma.serverMember.findMany({
       where: { serverId },
-      include: { user: { select: { id: true, username: true } } },
+      include: { user: { select: { id: true, username: true, avatarUrl: true } } },
       orderBy: { joinedAt: "asc" },
     });
 
@@ -455,12 +589,211 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
         return {
           id: m.user.id,
           username: m.user.username,
+          avatarUrl: m.user.avatarUrl,
           role: m.role,
           online,
           game: presence?.game ?? null,
           statusText: presence?.statusText ?? null,
         };
       }),
+    });
+  });
+
+  fastify.patch("/:serverId/members/:userId/role", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, userId } = request.params as { serverId: string; userId: string };
+    const { role } = request.body as { role?: string };
+
+    if (role !== "admin" && role !== "member") {
+      return reply.status(400).send({ error: "Cargo inválido" });
+    }
+
+    const server = await prisma.server.findUnique({ where: { id: serverId }, select: { ownerId: true } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId !== sub) return reply.status(403).send({ error: "Apenas o dono pode alterar cargos" });
+    if (userId === sub) return reply.status(400).send({ error: "Você já é o dono" });
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId, serverId } },
+      select: { id: true, role: true },
+    });
+    if (!member) return reply.status(404).send({ error: "Membro não encontrado" });
+    if (member.role === "owner") return reply.status(400).send({ error: "Não é possível alterar o dono por aqui" });
+
+    const updated = await prisma.serverMember.update({
+      where: { id: member.id },
+      data: { role },
+      include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+    });
+    await recordServerAudit(serverId, sub, "member.role", {
+      targetId: userId,
+      targetType: "user",
+      metadata: { previousRole: member.role, nextRole: role },
+    });
+
+    return reply.send({
+      member: {
+        id: updated.user.id,
+        username: updated.user.username,
+        avatarUrl: updated.user.avatarUrl,
+        role: updated.role,
+      },
+    });
+  });
+
+  fastify.post("/:serverId/members/:userId/kick", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, userId } = request.params as { serverId: string; userId: string };
+
+    const actorRole = await getServerRole(sub, serverId);
+    if (!actorRole) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(actorRole)) return reply.status(403).send({ error: "Sem permissão para expulsar membros" });
+    if (userId === sub) return reply.status(400).send({ error: "Você não pode expulsar a si mesmo" });
+
+    const server = await prisma.server.findUnique({ where: { id: serverId }, select: { ownerId: true } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId === userId) return reply.status(400).send({ error: "Não é possível expulsar o dono" });
+
+    const target = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId, serverId } },
+      select: { id: true, role: true },
+    });
+    if (!target) return reply.status(404).send({ error: "Membro não encontrado" });
+    if (actorRole !== "owner" && target.role === "admin") {
+      return reply.status(403).send({ error: "Admins só podem ser removidos pelo dono" });
+    }
+
+    await prisma.serverMember.delete({ where: { id: target.id } });
+    await recordServerAudit(serverId, sub, "member.kick", {
+      targetId: userId,
+      targetType: "user",
+      metadata: { targetRole: target.role },
+    });
+    return reply.status(204).send();
+  });
+
+  fastify.post("/:serverId/members/:userId/ban", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, userId } = request.params as { serverId: string; userId: string };
+    const { reason } = (request.body ?? {}) as { reason?: string };
+
+    const actorRole = await getServerRole(sub, serverId);
+    if (!actorRole) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(actorRole)) return reply.status(403).send({ error: "Sem permissão para banir membros" });
+    if (userId === sub) return reply.status(400).send({ error: "Você não pode banir a si mesmo" });
+
+    const server = await prisma.server.findUnique({ where: { id: serverId }, select: { ownerId: true } });
+    if (!server) return reply.status(404).send({ error: "Servidor não encontrado" });
+    if (server.ownerId === userId) return reply.status(400).send({ error: "Não é possível banir o dono" });
+
+    const target = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId, serverId } },
+      select: { id: true, role: true },
+    });
+    if (target && actorRole !== "owner" && target.role === "admin") {
+      return reply.status(403).send({ error: "Admins só podem ser banidos pelo dono" });
+    }
+
+    await prisma.$transaction([
+      prisma.serverBan.upsert({
+        where: { userId_serverId: { userId, serverId } },
+        create: {
+          userId,
+          serverId,
+          bannedBy: sub,
+          reason: reason?.trim().slice(0, 256) || null,
+        },
+        update: {
+          bannedBy: sub,
+          reason: reason?.trim().slice(0, 256) || null,
+          createdAt: new Date(),
+        },
+      }),
+      ...(target ? [prisma.serverMember.delete({ where: { id: target.id } })] : []),
+    ]);
+    await recordServerAudit(serverId, sub, "member.ban", {
+      targetId: userId,
+      targetType: "user",
+      metadata: { reason: reason?.trim().slice(0, 256) || null, targetRole: target?.role ?? null },
+    });
+
+    return reply.status(204).send();
+  });
+
+  fastify.get("/:serverId/bans", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const role = await getServerRole(sub, serverId);
+    if (!role) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para ver banidos" });
+
+    const bans = await prisma.serverBan.findMany({
+      where: { serverId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: {
+        user: { select: { id: true, username: true, avatarUrl: true } },
+        banner: { select: { id: true, username: true } },
+      },
+    });
+
+    return reply.send({
+      bans: bans.map((ban) => ({
+        id: ban.id,
+        userId: ban.userId,
+        username: ban.user.username,
+        avatarUrl: ban.user.avatarUrl,
+        bannedBy: ban.bannedBy,
+        bannedByName: ban.banner.username,
+        reason: ban.reason,
+        createdAt: ban.createdAt.toISOString(),
+      })),
+    });
+  });
+
+  fastify.delete("/:serverId/bans/:userId", { config: mutateLimit }, async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, userId } = request.params as { serverId: string; userId: string };
+
+    const role = await getServerRole(sub, serverId);
+    if (!role) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para remover banimento" });
+
+    await prisma.serverBan.delete({
+      where: { userId_serverId: { userId, serverId } },
+    }).catch(() => undefined);
+    await recordServerAudit(serverId, sub, "member.unban", { targetId: userId, targetType: "user" });
+
+    return reply.status(204).send();
+  });
+
+  fastify.get("/:serverId/audit", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId } = request.params as { serverId: string };
+
+    const role = await getServerRole(sub, serverId);
+    if (!role) return reply.status(403).send({ error: "Sem acesso" });
+    if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para ver auditoria" });
+
+    const logs = await prisma.serverAuditLog.findMany({
+      where: { serverId },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+      include: { actor: { select: { id: true, username: true } } },
+    });
+
+    return reply.send({
+      logs: logs.map((log) => ({
+        id: log.id,
+        actorId: log.actorId,
+        actorName: log.actor.username,
+        action: log.action,
+        targetId: log.targetId,
+        targetType: log.targetType,
+        metadata: log.metadata,
+        createdAt: log.createdAt.toISOString(),
+      })),
     });
   });
 
@@ -506,6 +839,22 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     if (filters.text) and.push({ content: { contains: filters.text, mode: "insensitive" } });
     if (authorId) where.authorId = authorId;
     if (channelId !== undefined) where.channelId = channelId;
+    if (channelId === undefined && !canManageServer(member.role)) {
+      const channels = await prisma.textChannel.findMany({ where: { serverId }, select: { id: true } });
+      const readable = await Promise.all(
+        channels.map(async (channel) => ({
+          id: channel.id,
+          readable: await canReadChannel(sub, serverId, channel.id),
+        }))
+      );
+      where.OR = [
+        { channelId: null },
+        { channelId: { in: readable.filter((item) => item.readable).map((item) => item.id) } },
+      ];
+    }
+    if (channelId !== undefined && !(await canReadChannel(sub, serverId, channelId))) {
+      return reply.status(403).send({ error: "Sem acesso ao canal" });
+    }
     if (filters.before || filters.after) {
       const range: { gte?: Date; lte?: Date } = {};
       if (filters.after) range.gte = filters.after;

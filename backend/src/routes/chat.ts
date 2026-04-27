@@ -1,6 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import { WebSocket } from "@fastify/websocket";
 import prisma from "../db/client.js";
+import { canManageServer, canReadChannel, canWriteChannel, getServerRole } from "../services/permissions.js";
 
 interface ReactionCount {
   emoji: string;
@@ -29,6 +30,7 @@ interface ChatMessage {
   editedAt: string | null;
   authorId: string;
   authorName: string;
+  authorAvatarUrl: string | null;
   channelId: string | null;
   replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
@@ -150,7 +152,7 @@ type MessageWithRels = {
   editedAt: Date | null;
   authorId: string;
   channelId: string | null;
-  author: { username: string };
+  author: { username: string; avatarUrl: string | null };
   reactions: { emoji: string; userId: string }[];
   replyTo: {
     id: string;
@@ -169,6 +171,7 @@ function serialize(m: MessageWithRels): ChatMessage {
     editedAt: m.editedAt?.toISOString() ?? null,
     authorId: m.authorId,
     authorName: m.author.username,
+    authorAvatarUrl: m.author.avatarUrl,
     channelId: m.channelId,
     replyTo: m.replyTo
       ? {
@@ -184,7 +187,7 @@ function serialize(m: MessageWithRels): ChatMessage {
 }
 
 const MESSAGE_INCLUDE = {
-  author: { select: { username: true } },
+  author: { select: { username: true, avatarUrl: true } },
   reactions: { select: { emoji: true, userId: true } },
   replyTo: {
     select: {
@@ -269,6 +272,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (data.type === "selectChannel") {
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            if (!(await canReadChannel(userId, serverId, channelId))) {
+              sendError("Sem acesso ao canal.");
+              return;
+            }
             if (conn.currentChannelId !== channelId) {
               stopTyping(serverId, userId, username, conn.currentChannelId);
               conn.currentChannelId = channelId;
@@ -292,6 +299,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             const beforeId = typeof data.before === "string" ? data.before : null;
             if (!beforeId) return;
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            if (!(await canReadChannel(userId, serverId, channelId))) {
+              sendError("Sem acesso ao canal.");
+              return;
+            }
             const anchor = await prisma.message.findUnique({ where: { id: beforeId }, select: { createdAt: true } });
             if (!anchor) return;
             const older = await prisma.message.findMany({
@@ -315,6 +326,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
           if (data.type === "typing") {
             const channelId = typeof data.channelId === "string" ? data.channelId : null;
+            if (!(await canWriteChannel(userId, serverId, channelId))) return;
             touchTyping(serverId, userId, username, channelId);
             return;
           }
@@ -356,6 +368,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
                 sendError("Canal inválido.");
                 return;
               }
+            }
+            if (!(await canWriteChannel(userId, serverId, channelId))) {
+              sendError("Sem permissão para enviar neste canal.");
+              return;
             }
 
             if (replyToId) {
@@ -401,6 +417,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
             const msg = await prisma.message.findUnique({ where: { id } });
             if (!msg || msg.serverId !== serverId) return;
+            if (!(await canReadChannel(userId, serverId, msg.channelId))) return;
 
             const existing = await prisma.messageReaction.findUnique({
               where: { messageId_userId_emoji: { messageId: id, userId, emoji } },
@@ -436,6 +453,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
             const existing = await prisma.message.findUnique({ where: { id } });
             if (!existing || existing.serverId !== serverId) return;
+            if (!(await canWriteChannel(userId, serverId, existing.channelId))) return;
             if (existing.authorId !== userId) {
               sendError("Só o autor pode editar a mensagem.");
               return;
@@ -461,12 +479,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
 
             const existing = await prisma.message.findUnique({ where: { id } });
             if (!existing || existing.serverId !== serverId) return;
+            if (!(await canReadChannel(userId, serverId, existing.channelId))) return;
 
-            const server = await prisma.server.findUnique({
-              where: { id: serverId },
-              select: { ownerId: true },
-            });
-            const canDelete = existing.authorId === userId || server?.ownerId === userId;
+            const role = await getServerRole(userId, serverId);
+            const canDelete = existing.authorId === userId || canManageServer(role);
             if (!canDelete) {
               sendError("Sem permissão para apagar esta mensagem.");
               return;

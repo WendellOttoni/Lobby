@@ -43,6 +43,20 @@ O processo do backend também mantém estado efêmero em memória: presença onl
 
 Uploads passam por `/upload`, exigem JWT e aceitam apenas JPEG, PNG, GIF, WebP, MP4 e PDF. O backend valida MIME e extensão, gera nome seguro no servidor e serve arquivos com `X-Content-Type-Options: nosniff`.
 
+## Permissões e moderação
+
+O modelo atual usa três cargos: `owner`, `admin` e `member`. O dono pode transferir o servidor, deletar o servidor, alterar cargos e resetar convites. Donos e admins podem gerenciar canais, categorias, salas, pins, permissões por canal e remover mensagens. Donos/admins também podem expulsar ou banir membros, com a regra de que admins não moderam outros admins.
+
+Cada canal de texto pode ter permissões por cargo para leitura e escrita. Donos/admins passam pela permissão de gestão; membros respeitam as regras do canal no carregamento da lista, histórico, busca, digitação, envio, edição e reação.
+
+Eventos administrativos relevantes são gravados em `ServerAuditLog`, incluindo entrada/saída, alteração de cargo, kick/ban/unban, reset de convite e transferência de propriedade. A tela de Administração mostra banidos, auditoria e permissões.
+
+Preferências de notificação ficam em `NotificationPreference` por servidor/canal e são espelhadas no localStorage do desktop para resposta imediata da UI.
+
+## Convites
+
+Cada servidor mantém `inviteCode`, `inviteUses`, `inviteMaxUses` e `inviteExpiresAt`. Ao entrar por convite, o backend valida banimento, expiração e limite de usos antes de criar a associação do membro.
+
 ## Decisões de design
 
 ### Por que Tauri e não Electron?

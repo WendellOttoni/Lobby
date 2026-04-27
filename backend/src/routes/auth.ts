@@ -48,7 +48,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const user = await prisma.user.create({
         data: { username: cleanUsername, email: cleanEmail, passwordHash },
-        select: { id: true, username: true, email: true, createdAt: true },
+        select: { id: true, username: true, email: true, createdAt: true, avatarUrl: true },
       });
 
       const token = fastify.jwt.sign({ sub: user.id, username: user.username });
@@ -91,6 +91,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           username: user.username,
           email: user.email,
           createdAt: user.createdAt,
+          avatarUrl: user.avatarUrl,
         },
       });
     },
@@ -104,7 +105,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const user = await prisma.user.findUnique({
         where: { id: sub },
-        select: { id: true, username: true, email: true, createdAt: true, statusText: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true, avatarUrl: true },
       });
 
       if (!user) {
@@ -146,20 +147,33 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate] },
     async (request, reply) => {
       const { sub } = request.user as { sub: string };
-      const { username, currentPassword, newPassword, statusText } = request.body as {
+      const { username, currentPassword, newPassword, statusText, avatarUrl } = request.body as {
         username?: string;
         currentPassword?: string;
         newPassword?: string;
         statusText?: string | null;
+        avatarUrl?: string | null;
       };
 
       const user = await prisma.user.findUniqueOrThrow({ where: { id: sub } });
 
-      const updates: { username?: string; passwordHash?: string; statusText?: string | null } = {};
+      const updates: { username?: string; passwordHash?: string; statusText?: string | null; avatarUrl?: string | null } = {};
 
       if (statusText !== undefined) {
         const trimmed = statusText === null ? null : String(statusText).trim().slice(0, 128);
         updates.statusText = trimmed && trimmed.length > 0 ? trimmed : null;
+      }
+
+      if (avatarUrl !== undefined) {
+        const trimmed = avatarUrl === null ? null : String(avatarUrl).trim().slice(0, 512);
+        const publicUrl = (process.env.PUBLIC_URL ?? "http://localhost:3000").replace(/\/$/, "");
+        if (trimmed && !trimmed.startsWith(`${publicUrl}/uploads/`)) {
+          return reply.status(400).send({ error: "Avatar inválido" });
+        }
+        if (trimmed && !/\.(jpe?g|png|gif|webp)$/i.test(trimmed)) {
+          return reply.status(400).send({ error: "Avatar deve ser uma imagem" });
+        }
+        updates.avatarUrl = trimmed || null;
       }
 
       const cleanUsername = username?.trim();
@@ -191,7 +205,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const updated = await prisma.user.update({
         where: { id: sub },
         data: updates,
-        select: { id: true, username: true, email: true, createdAt: true, statusText: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true, avatarUrl: true },
       });
 
       return reply.send({ user: updated });

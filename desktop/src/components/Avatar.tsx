@@ -7,9 +7,10 @@ interface Props {
   speaking?: boolean;
   muted?: boolean;
   color?: string;
+  src?: string | null;
 }
 
-export function Avatar({ name, id, size = 32, speaking, muted, color }: Props) {
+export function Avatar({ name, id, size = 32, speaking, muted, color, src }: Props) {
   const bg = color ?? avatarBg(id ?? name);
   const initials = avatarInitials(name);
   const classes = ["avatar"];
@@ -20,9 +21,12 @@ export function Avatar({ name, id, size = 32, speaking, muted, color }: Props) {
       {speaking && <div className="avatar-ring" />}
       <div
         className="avatar-inner"
-        style={{ background: bg, fontSize: size * 0.36 }}
+        style={{
+          background: src ? `center / cover no-repeat url("${src}")` : bg,
+          fontSize: size * 0.36,
+        }}
       >
-        {initials}
+        {!src && initials}
       </div>
     </div>
   );

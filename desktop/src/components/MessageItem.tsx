@@ -27,6 +27,7 @@ export interface ChatMessage {
   editedAt?: string | null;
   authorId: string;
   authorName: string;
+  authorAvatarUrl?: string | null;
   channelId: string | null;
   replyTo: ReplySnippet | null;
   reactions: ReactionCount[];
@@ -196,7 +197,7 @@ export const Message = memo(function Message({
           </div>
         )}
         {!grouped ? (
-          <Avatar name={msg.authorName} id={msg.authorId} size={38} />
+          <Avatar name={msg.authorName} id={msg.authorId} src={msg.authorAvatarUrl} size={38} />
         ) : (
           <div className="chat-msg-grouped-spacer">
             <span className="chat-msg-grouped-time">{formatTime(msg.createdAt)}</span>

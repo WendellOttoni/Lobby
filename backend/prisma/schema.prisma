@@ -13,14 +13,19 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   statusText   String?  @db.VarChar(128)
+  avatarUrl    String?  @db.VarChar(512)
 
   ownedServers           Server[]             @relation("ServerOwner")
   serverMemberships      ServerMember[]
+  serverBans             ServerBan[]          @relation("ServerBannedUser")
+  issuedServerBans       ServerBan[]          @relation("ServerBanActor")
+  serverAuditLogs        ServerAuditLog[]     @relation("ServerAuditActor")
   roomMemberships        RoomMember[]
   messages               Message[]
   reactions              MessageReaction[]
   pins                   MessagePin[]
   channelReads           ChannelRead[]
+  notificationPreferences NotificationPreference[]
   sentFriendRequests     Friendship[]         @relation("FriendRequests")
   receivedFriendRequests Friendship[]         @relation("FriendResponses")
   dmConversations1       DirectConversation[] @relation("DMUser1")
@@ -32,15 +37,22 @@ model Server {
   id         String   @id @default(cuid())
   name       String
   inviteCode String   @unique
+  inviteUses Int      @default(0)
+  inviteMaxUses Int?
+  inviteExpiresAt DateTime?
   ownerId    String
   createdAt  DateTime @default(now())
 
   owner      User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members    ServerMember[]
+  bans       ServerBan[]
+  auditLogs  ServerAuditLog[]
+  notificationPreferences NotificationPreference[]
   rooms      Room[]
   channels   TextChannel[]
   messages   Message[]
   categories Category[]
+  channelPermissions ChannelPermission[]
 }
 
 model Category {
@@ -69,6 +81,55 @@ model ServerMember {
   server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
 
   @@unique([userId, serverId])
+}
+
+model ServerBan {
+  id        String   @id @default(cuid())
+  userId    String
+  serverId  String
+  bannedBy  String
+  reason    String?  @db.VarChar(256)
+  createdAt DateTime @default(now())
+
+  user   User   @relation("ServerBannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  banner User   @relation("ServerBanActor", fields: [bannedBy], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId])
+  @@index([serverId])
+}
+
+model ServerAuditLog {
+  id         String   @id @default(cuid())
+  serverId   String
+  actorId    String
+  action     String   @db.VarChar(64)
+  targetId   String?  @db.VarChar(128)
+  targetType String?  @db.VarChar(64)
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  actor  User   @relation("ServerAuditActor", fields: [actorId], references: [id], onDelete: Cascade)
+
+  @@index([serverId, createdAt])
+  @@index([actorId])
+}
+
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  serverId  String
+  scopeKey  String   @db.VarChar(160)
+  channelId String?
+  muted     Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serverId, scopeKey])
+  @@index([serverId])
 }
 
 model Room {
@@ -110,9 +171,27 @@ model TextChannel {
   category Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   messages Message[]
   reads    ChannelRead[]
+  permissions ChannelPermission[]
 
   @@index([serverId])
   @@index([categoryId])
+}
+
+model ChannelPermission {
+  id        String   @id @default(cuid())
+  serverId  String
+  channelId String
+  role      String   @db.VarChar(32)
+  canRead   Boolean  @default(true)
+  canWrite  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  server  Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  channel TextChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, role])
+  @@index([serverId])
 }
 
 model ChannelRead {
