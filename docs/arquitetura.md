@@ -16,12 +16,13 @@
 │ Fastify  │  │  (mídia/voz) │
 └────┬─────┘  └──────────────┘
      │
-  ┌──┴──┐
-  ▼     ▼
-┌────┐ ┌─────┐
-│ PG │ │Redis│
-└────┘ └─────┘
+     ▼
+┌────────────┐
+│ PostgreSQL │
+└────────────┘
 ```
+
+O processo do backend também mantém estado efêmero em memória: presença online, conexões WebSocket de chat, conexões por usuário para DMs e sinalização de chamada privada. Por isso, a topologia suportada hoje é uma instância de backend. Redis/pub-sub é a próxima mudança necessária antes de múltiplas réplicas.
 
 ## Fluxo de uma chamada
 
@@ -29,6 +30,18 @@
 2. Usuário pede pra entrar na sala X → backend valida permissões no Postgres → gera token LiveKit assinado
 3. App usa o token pra conectar direto no LiveKit via WebRTC
 4. LiveKit cuida do roteamento de áudio entre todos os participantes da sala
+
+## Fluxo de chat
+
+1. O app abre `/servers/:serverId/ws` com o JWT na query string
+2. O backend valida o usuário e a associação ao servidor
+3. Ao selecionar um canal, o cliente envia `selectChannel` e recebe o histórico mais recente
+4. Mensagens novas são persistidas no PostgreSQL e transmitidas aos clientes no mesmo canal
+5. Clientes em outros canais recebem apenas um evento de unread
+
+## Uploads
+
+Uploads passam por `/upload`, exigem JWT e aceitam apenas JPEG, PNG, GIF, WebP, MP4 e PDF. O backend valida MIME e extensão, gera nome seguro no servidor e serve arquivos com `X-Content-Type-Options: nosniff`.
 
 ## Decisões de design
 
@@ -48,3 +61,6 @@ com TypeBox/JSON Schema, e tipagem TypeScript muito melhor out-of-the-box.
 ### Por que Prisma?
 ORM com type-safety gerada a partir do schema. Migrações versionadas. Muito mais seguro do que
 queries SQL manuais para um projeto sem DBA dedicado.
+
+### Por que instância única no backend?
+O produto usa WebSockets em memória para baixa complexidade no MVP. Isso evita Redis no setup local, mas significa que presença e eventos em tempo real não atravessam processos. Em produção, mantenha uma réplica ou implemente Redis/pub-sub antes de escalar.

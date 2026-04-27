@@ -1,7 +1,7 @@
 import { FastifyPluginAsync } from "fastify";
 import bcrypt from "bcrypt";
 import prisma from "../db/client.js";
-import { updatePresence, getPresence } from "../services/presence.js";
+import { updatePresence } from "../services/presence.js";
 
 const SALT_ROUNDS = 12;
 
@@ -27,9 +27,15 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         email: string;
         password: string;
       };
+      const cleanUsername = username.trim();
+      const cleanEmail = email.trim().toLowerCase();
+
+      if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+        return reply.status(400).send({ error: "Username deve conter apenas letras, números e _" });
+      }
 
       const existing = await prisma.user.findFirst({
-        where: { OR: [{ email }, { username }] },
+        where: { OR: [{ email: cleanEmail }, { username: cleanUsername }] },
       });
 
       if (existing) {
@@ -41,7 +47,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
       const user = await prisma.user.create({
-        data: { username, email, passwordHash },
+        data: { username: cleanUsername, email: cleanEmail, passwordHash },
         select: { id: true, username: true, email: true, createdAt: true },
       });
 
@@ -68,8 +74,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         email: string;
         password: string;
       };
+      const cleanEmail = email.trim().toLowerCase();
 
-      const user = await prisma.user.findUnique({ where: { email } });
+      const user = await prisma.user.findUnique({ where: { email: cleanEmail } });
 
       if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
         return reply.status(401).send({ error: "Credenciais inválidas" });
@@ -112,11 +119,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     "/heartbeat",
     { preHandler: [fastify.authenticate] },
     async (request, reply) => {
-      const { sub, username } = request.user as { sub: string; username: string };
+      const { sub } = request.user as { sub: string; username: string };
       const { game } = (request.body ?? {}) as { game?: string | null };
-      const existing = getPresence(sub);
-      const statusText = existing?.statusText ?? (await prisma.user.findUnique({ where: { id: sub }, select: { statusText: true } }))?.statusText ?? null;
-      updatePresence(sub, username, game ?? null, statusText);
+      const user = await prisma.user.findUnique({
+        where: { id: sub },
+        select: { username: true, statusText: true },
+      });
+      if (!user) return reply.status(404).send({ error: "Usuário não encontrado" });
+      updatePresence(sub, user.username, game ?? null, user.statusText);
       return reply.status(204).send();
     }
   );
@@ -152,10 +162,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         updates.statusText = trimmed && trimmed.length > 0 ? trimmed : null;
       }
 
-      if (username && username !== user.username) {
-        const taken = await prisma.user.findUnique({ where: { username } });
+      const cleanUsername = username?.trim();
+      if (cleanUsername && cleanUsername !== user.username) {
+        if (!/^[a-zA-Z0-9_]+$/.test(cleanUsername)) {
+          return reply.status(400).send({ error: "Username deve conter apenas letras, números e _" });
+        }
+        const taken = await prisma.user.findUnique({ where: { username: cleanUsername } });
         if (taken) return reply.status(409).send({ error: "Username já em uso" });
-        updates.username = username;
+        updates.username = cleanUsername;
       }
 
       if (newPassword) {

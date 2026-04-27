@@ -27,7 +27,7 @@ const DMContext = createContext<DMContextValue | null>(null);
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3000";
 
 export function DMProvider({ children }: { children: ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [friends, setFriends] = useState<FriendUser[]>([]);
   const [incoming, setIncoming] = useState<FriendRequest[]>([]);
   const [outgoing, setOutgoing] = useState<OutgoingRequest[]>([]);
@@ -46,7 +46,7 @@ export function DMProvider({ children }: { children: ReactNode }) {
   }, [token]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !user) return;
     refreshFriends();
 
     const wsUrl = API_URL.replace(/^http/, "ws");
@@ -59,7 +59,8 @@ export function DMProvider({ children }: { children: ReactNode }) {
 
         if (data.type === "dm") {
           const msg: DMMessage = data;
-          const otherId = msg.authorId;
+          const otherId = msg.authorId === user?.id ? msg.recipientId : msg.authorId;
+          if (!otherId) return;
           setDMMessages((prev) => {
             const existing = prev[otherId] ?? [];
             if (existing.some((m) => m.id === msg.id)) return prev;
@@ -101,7 +102,7 @@ export function DMProvider({ children }: { children: ReactNode }) {
       ws.close();
       wsRef.current = null;
     };
-  }, [token, refreshFriends]);
+  }, [token, user?.id, refreshFriends]);
 
   function sendDM(toUserId: string, content: string) {
     wsRef.current?.send(JSON.stringify({ type: "dm", to: toUserId, content }));

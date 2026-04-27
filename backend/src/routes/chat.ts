@@ -476,7 +476,10 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             broadcastChannel(serverId, existing.channelId, JSON.stringify({ type: "delete", id }));
             return;
           }
-        } catch {}
+        } catch (err) {
+          req.log.warn({ err, serverId, userId }, "Erro ao processar mensagem WebSocket de chat");
+          sendError("Mensagem inválida.");
+        }
       });
 
       socket.on("close", () => {

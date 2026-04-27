@@ -4,14 +4,13 @@ import { FastifyPluginAsync } from "fastify";
 
 const MAX_BYTES = (Number(process.env.UPLOAD_MAX_MB) || 25) * 1024 * 1024;
 
-const ALLOWED_TYPES = new Set([
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "image/svg+xml",
-  "video/mp4",
-  "application/pdf",
+const ALLOWED_TYPES = new Map<string, Set<string>>([
+  ["image/jpeg", new Set([".jpg", ".jpeg"])],
+  ["image/png", new Set([".png"])],
+  ["image/gif", new Set([".gif"])],
+  ["image/webp", new Set([".webp"])],
+  ["video/mp4", new Set([".mp4"])],
+  ["application/pdf", new Set([".pdf"])],
 ]);
 
 export const uploadDir = path.join(process.cwd(), "uploads");
@@ -30,12 +29,13 @@ const uploadRoutes: FastifyPluginAsync = async (fastify) => {
       const data = await request.file({ limits: { fileSize: MAX_BYTES } });
       if (!data) return reply.status(400).send({ error: "Nenhum arquivo enviado." });
 
-      if (!ALLOWED_TYPES.has(data.mimetype)) {
+      const allowedExtensions = ALLOWED_TYPES.get(data.mimetype);
+      const ext = path.extname(data.filename).toLowerCase();
+      if (!allowedExtensions || !allowedExtensions.has(ext)) {
         data.file.resume();
         return reply.status(400).send({ error: "Tipo de arquivo não permitido." });
       }
 
-      const ext = path.extname(data.filename).toLowerCase();
       const safeName = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}${ext}`;
       const dest = path.join(uploadDir, safeName);
 

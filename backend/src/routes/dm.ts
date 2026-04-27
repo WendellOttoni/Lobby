@@ -87,6 +87,7 @@ const dmRoutes: FastifyPluginAsync = async (fastify) => {
             content: msg.content,
             createdAt: msg.createdAt.toISOString(),
             authorId: userId,
+            recipientId,
             authorName: msg.author.username,
           };
 
@@ -110,12 +111,12 @@ const dmRoutes: FastifyPluginAsync = async (fastify) => {
           });
           if (!friendship) return;
 
-          const me = await prisma.user.findUnique({ where: { id: userId }, select: { username: true } });
+          const me = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { username: true } });
           const roomName = `dm-${[userId, recipientId].sort().join("-")}`;
 
           sendToUser(recipientId, {
             type: "call_invite",
-            from: { id: userId, username: me?.username },
+            from: { id: userId, username: me.username },
             roomName,
           });
           return;
@@ -134,7 +135,9 @@ const dmRoutes: FastifyPluginAsync = async (fastify) => {
           sendToUser(otherId, { type: "call_ended" });
           return;
         }
-      } catch {}
+      } catch (err) {
+        req.log.warn({ err, userId }, "Erro ao processar mensagem WebSocket de usuário");
+      }
     });
 
     socket.on("close", () => {
@@ -190,6 +193,7 @@ const dmRoutes: FastifyPluginAsync = async (fastify) => {
         createdAt: m.createdAt.toISOString(),
         editedAt: m.editedAt?.toISOString() ?? null,
         authorId: m.authorId,
+        recipientId: m.authorId === me ? otherId : me,
         authorName: m.author.username,
         conversationId: m.conversationId,
       })),

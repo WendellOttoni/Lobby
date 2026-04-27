@@ -40,5 +40,8 @@
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "@hono/node-server": "^1.19.13"
   }
 }

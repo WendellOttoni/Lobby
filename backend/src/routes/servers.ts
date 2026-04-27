@@ -115,8 +115,14 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
     const { sub } = request.user as { sub: string };
     const { serverId } = request.params as { serverId: string };
 
-    await prisma.serverMember.update({
+    const member = await prisma.serverMember.findUnique({
       where: { userId_serverId: { userId: sub, serverId } },
+      select: { id: true },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    await prisma.serverMember.update({
+      where: { id: member.id },
       data: { lastReadAt: new Date() },
     });
 
@@ -495,8 +501,9 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       channelId = channel.id;
     }
 
+    const and: Record<string, unknown>[] = [];
     const where: Record<string, unknown> = { serverId };
-    if (filters.text) where.content = { contains: filters.text, mode: "insensitive" };
+    if (filters.text) and.push({ content: { contains: filters.text, mode: "insensitive" } });
     if (authorId) where.authorId = authorId;
     if (channelId !== undefined) where.channelId = channelId;
     if (filters.before || filters.after) {
@@ -506,10 +513,16 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
       where.createdAt = range;
     }
     if (filters.hasLink) {
-      where.content = { contains: filters.text || "http", mode: "insensitive" };
+      and.push({
+        OR: [
+          { content: { contains: "http://", mode: "insensitive" } },
+          { content: { contains: "https://", mode: "insensitive" } },
+          { content: { contains: "www.", mode: "insensitive" } },
+        ],
+      });
     }
     if (filters.hasImage) {
-      where.OR = [
+      and.push({ OR: [
         { content: { contains: ".png", mode: "insensitive" } },
         { content: { contains: ".jpg", mode: "insensitive" } },
         { content: { contains: ".jpeg", mode: "insensitive" } },
@@ -517,8 +530,9 @@ const serversRoutes: FastifyPluginAsync = async (fastify) => {
         { content: { contains: ".webp", mode: "insensitive" } },
         { content: { contains: "tenor.com", mode: "insensitive" } },
         { content: { contains: "giphy.com", mode: "insensitive" } },
-      ];
+      ] });
     }
+    if (and.length > 0) where.AND = and;
 
     const results = await prisma.message.findMany({
       where,

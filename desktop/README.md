@@ -1,7 +1,27 @@
-# Tauri + React + Typescript
+# Lobby Desktop
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Cliente desktop do Lobby, construído com Tauri v2, React, TypeScript e Vite.
 
-## Recommended IDE Setup
+## Scripts
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+```bash
+npm install
+npm run dev
+npm run build
+npm run tauri dev
+```
+
+## Integrações Tauri
+
+- Tray icon e fechamento para bandeja
+- Auto-update via GitHub Releases
+- Deep links `lobby://join/CODE`
+- Atalhos globais para push-to-talk, mute e deafen
+- Notificações nativas
+- Autostart com Windows
+- Overlay de voz sempre no topo
+- Detecção de jogo ativo no Windows
+
+## Variáveis de build
+
+`VITE_API_URL` define a URL do backend usada pelo cliente. Em desenvolvimento, o padrão é `http://localhost:3000`.

@@ -143,6 +143,12 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       const { sub } = request.user as { sub: string };
       const { serverId, channelId } = request.params as { serverId: string; channelId: string };
 
+      const member = await prisma.serverMember.findUnique({
+        where: { userId_serverId: { userId: sub, serverId } },
+        select: { id: true },
+      });
+      if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
       const channel = await prisma.textChannel.findFirst({ where: { id: channelId, serverId } });
       if (!channel) return reply.status(404).send({ error: "Canal não encontrado" });
 

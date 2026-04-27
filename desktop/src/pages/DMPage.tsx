@@ -11,7 +11,7 @@ import { formatTime } from "../components/MessageItem";
 export function DMPage() {
   const { userId } = useParams<{ userId: string }>();
   const { token } = useAuth();
-  const { friends, dmMessages, sendDM, sendCallInvite, loadDMMessages } = useDM();
+  const { friends, dmMessages, sendDM, sendCallInvite, sendCallEnded, loadDMMessages } = useDM();
   const { activeRoomName, connectDM, disconnect } = useVoice();
   const [input, setInput] = useState("");
   const [calling, setCalling] = useState(false);
@@ -48,6 +48,7 @@ export function DMPage() {
   }
 
   function handleEndCall() {
+    if (userId) sendCallEnded(userId);
     disconnect();
     setCalling(false);
   }

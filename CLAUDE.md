@@ -8,13 +8,14 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 ## O que já está shippado (MVP completo + extras)
 
 **Auth**
-- Cadastro, login e atualização de perfil (username + senha) via JWT
+- Cadastro, login, atualização de perfil (username, senha, status customizado) e exclusão de conta via JWT
 
 **Servidores (multi-tenant)**
 - Criação de servidor com invite code único
 - Entrar em servidor pelo código
 - Listagem dos servidores do usuário
 - Salas de voz dentro de cada servidor (CRUD)
+- Transferência de propriedade, reset de convite, sair/deletar servidor
 
 **Voz**
 - Entrada/saída de salas com WebRTC via LiveKit
@@ -23,10 +24,18 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 - Lista de participantes online com cards (avatar por cor, indicador de fala)
 - Menu de contexto por participante (silenciar localmente)
 - Voz persistente: navegar entre páginas sem cair da sala
+- Compartilhamento de tela
+- Overlay flutuante de participantes
 
 **Chat de texto**
 - Chat por servidor via WebSocket com persistência em PostgreSQL
-- Histórico carregado ao entrar no servidor
+- Canais de texto, categorias, histórico, paginação, busca, typing indicator
+- Edição, exclusão, replies, reações, pins e anexos
+
+**Amigos e DM**
+- Solicitações de amizade
+- Mensagens diretas por WebSocket
+- Chamadas de voz privadas via LiveKit
 
 **App desktop (Tauri)**
 - Janela minimiza para o tray em vez de fechar
@@ -45,8 +54,7 @@ Foco: voz bem feita, binário pequeno, baixo consumo de RAM, servidor próprio.
 
 ## O que NÃO entra (fora de escopo atual)
 
-Vídeo, compartilhamento de tela, overlay, permissões avançadas,
-moderação, banimento, bots, notificações push, upload de arquivos.
+Permissões avançadas, moderação, banimento, bots, notificações push e múltiplas instâncias do backend.
 
 ## Stack
 
@@ -60,7 +68,7 @@ moderação, banimento, bots, notificações push, upload de arquivos.
 | Autenticação | JWT |
 | Servidor de mídia | LiveKit (binário local em dev, self-hosted em prod) |
 | Deploy backend | Railway |
-| CI/CD | GitHub Actions — build + release automática |
+| CI/CD | GitHub Actions — quality checks + release automática |
 
 ## Estrutura de pastas
 
@@ -68,8 +76,8 @@ moderação, banimento, bots, notificações push, upload de arquivos.
 lobby/
 ├── backend/
 │   ├── src/
-│   │   ├── routes/        # auth.ts | servers.ts | chat.ts
-│   │   ├── services/      # livekit.ts
+│   │   ├── routes/        # auth | servers | chat | channels | categories | friends | dm | upload
+│   │   ├── services/      # livekit | presence | userConnections
 │   │   ├── plugins/       # jwt.ts
 │   │   ├── db/            # client.ts (Prisma)
 │   │   └── index.ts
@@ -78,9 +86,9 @@ lobby/
 │   └── package.json
 ├── desktop/
 │   ├── src/
-│   │   ├── components/    # ServerSidebar, ChatPanel, VoiceBar, ParticipantCard, SettingsModal…
-│   │   ├── pages/         # LoginPage, RegisterPage, ServersLayout, ServerPage, RoomPage
-│   │   ├── contexts/      # AuthContext, VoiceContext
+│   │   ├── components/    # ServerSidebar, ChatPanel, VoiceBar, MemberList, ScreenShareView…
+│   │   ├── pages/         # Login, Register, Servers, Settings, Friends, DM, Overlay
+│   │   ├── contexts/      # AuthContext, VoiceContext, DMContext
 │   │   ├── lib/           # api.ts, avatar.ts
 │   │   └── App.tsx
 │   ├── src-tauri/
@@ -92,7 +100,8 @@ lobby/
 │   ├── livekit-server.exe
 │   └── livekit.yaml
 ├── .github/workflows/
-│   └── build.yml          # CI: build + tag + release + prune
+│   ├── build.yml          # CI: build + tag + release + prune
+│   └── quality.yml        # CI: backend + desktop builds
 └── CLAUDE.md
 ```
 
@@ -112,12 +121,15 @@ lobby/
 
 ## Schema do banco (Prisma)
 
-- `User` — id, username, email, passwordHash
+- `User` — id, username, email, passwordHash, statusText
 - `Server` — id, name, inviteCode, ownerId
 - `ServerMember` — userId + serverId + role (unique pair)
-- `Room` — id, name, serverId
+- `Category` — agrupamento e ordenação de canais/salas
+- `TextChannel` — canais de texto por servidor
+- `Room` — id, name, serverId, categoryId, position
 - `RoomMember` — userId + roomId (unique pair, usado para presença)
-- `Message` — id, content, authorId, serverId, createdAt (index em serverId+createdAt)
+- `Message` — conteúdo, autor, servidor, canal, reply, edição, reações, pins e anexos
+- `Friendship`, `DirectConversation`, `DirectMessage` — amigos e DMs
 
 ## Variáveis de ambiente (backend)
 
@@ -126,8 +138,14 @@ lobby/
 - `LIVEKIT_API_KEY` — chave da API do LiveKit
 - `LIVEKIT_API_SECRET` — segredo da API do LiveKit
 - `LIVEKIT_URL` — URL do servidor LiveKit (ex: `ws://localhost:7880`)
+- `PUBLIC_URL` — URL pública do backend usada em links de upload
+- `UPLOAD_MAX_MB` — limite de upload em MB (padrão: 25)
 - `PORT` — porta HTTP (padrão: 3000)
 - `CORS_ORIGINS` — origens extras permitidas no CORS, separadas por vírgula (opcional)
+
+## Operação do backend
+
+O backend atual é single-instance. Presença, conexões WebSocket de chat, conexões por usuário e sinalização de DMs ficam em memória do processo. Não rode múltiplas réplicas atrás de load balancer até mover esses estados para Redis/pub-sub ou serviço equivalente.
 
 ## Secrets do CI (GitHub)
 
@@ -146,6 +164,5 @@ lobby/
 ## Próximas possibilidades
 
 - Permissões por sala (owner pode moderar)
-- Overlay flutuante sobre outros apps
 - Upload de avatar real (hoje é gerado por cor)
 - Mover presença pra Redis se for escalar pra múltiplas instâncias do backend

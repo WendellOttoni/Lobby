@@ -65,6 +65,10 @@ fastify.register(fastifyStatic, {
   root: path.resolve(uploadDir),
   prefix: "/uploads/",
   decorateReply: false,
+  setHeaders: (res) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  },
 });
 fastify.register(jwtPlugin);
 fastify.register(authRoutes, { prefix: "/auth" });

@@ -105,6 +105,7 @@ export interface DMMessage {
   createdAt: string;
   editedAt: string | null;
   authorId: string;
+  recipientId: string;
   authorName: string;
   conversationId: string;
 }
