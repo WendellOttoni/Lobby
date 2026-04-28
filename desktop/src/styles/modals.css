@@ -1,0 +1,328 @@
+/* ============================================
+   Generic modal (Settings, Server modal)
+   ============================================ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 3, 10, 0.7);
+  backdrop-filter: blur(6px);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: 24px;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.modal.settings-modal { max-width: 540px; }
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.settings-header h2 {
+  font-family: var(--display);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.settings-close {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-size: 16px;
+}
+.settings-close:hover { background: var(--surface-2); color: var(--text); }
+
+.settings-body { display: flex; flex-direction: column; gap: 22px; }
+.settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.settings-section h3 {
+  font-family: var(--display);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  margin-bottom: 4px;
+}
+.settings-form { display: flex; flex-direction: column; gap: 12px; }
+.settings-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.settings-label input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.settings-label input:focus { border-color: var(--purple); }
+.settings-success { color: var(--good); font-size: 13px; }
+
+.settings-form button[type="submit"] {
+  background: var(--brand);
+  color: white;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 14px;
+  margin-top: 4px;
+  box-shadow: var(--brand-glow);
+}
+
+.settings-system { display: flex; flex-direction: column; gap: 10px; }
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text);
+}
+.settings-toggle {
+  background: var(--surface-2);
+  color: var(--text-dim);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.12s, color 0.12s;
+}
+.settings-toggle.on { background: var(--brand); color: white; }
+
+.settings-ptt-desc { font-size: 12.5px; color: var(--text-dim); }
+.settings-ptt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-ptt-key {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.btn-secondary {
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s;
+}
+.btn-secondary:hover { background: var(--surface-3); }
+.btn-danger-outline {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(251, 113, 133, 0.4);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: background 0.12s;
+}
+.btn-danger-outline:hover { background: rgba(251, 113, 133, 0.12); }
+
+.settings-update { display: flex; flex-direction: column; gap: 6px; }
+.settings-version { font-size: 12px; color: var(--text-dim); }
+.settings-version code { font-family: var(--mono); color: var(--text); }
+.settings-update button {
+  background: var(--surface-2);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 9px 14px;
+  font-weight: 600;
+  font-size: 13px;
+  align-self: flex-start;
+}
+.settings-update button.btn-secondary { background: var(--surface-2); }
+.settings-danger-zone { display: flex; flex-direction: column; gap: 8px; }
+.settings-danger-desc { font-size: 12px; color: var(--text-dim); }
+.settings-delete-confirm { display: flex; flex-direction: column; gap: 10px; }
+.settings-delete-confirm p { font-size: 13px; color: var(--text-dim); line-height: 1.5; }
+.settings-delete-confirm input { background: var(--surface-3); border: 1px solid var(--danger); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 13px; }
+.settings-delete-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ============================================
+   Server Modal (create/join)
+   ============================================ */
+.server-modal h2 { font-family: var(--display); font-size: 20px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 8px; }
+.server-modal-tabs { display: flex; gap: 4px; margin-bottom: 16px; background: var(--surface-2); border-radius: 10px; padding: 4px; }
+.server-modal-tab {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  background: transparent;
+  transition: background 0.12s, color 0.12s;
+}
+.server-modal-tab.active { background: var(--bg); color: var(--text); }
+.server-modal-form { display: flex; flex-direction: column; gap: 12px; }
+.server-modal-form label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.server-modal-form input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.server-modal-form input:focus { border-color: var(--purple); }
+.server-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.server-modal-actions button[type="submit"] {
+  background: var(--brand);
+  color: white;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: var(--brand-glow);
+}
+
+/* ============================================
+   Context menu (participant right-click, TransferModal)
+   ============================================ */
+.ctx-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+}
+.ctx-menu {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px;
+  min-width: 200px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  z-index: 201;
+}
+.ctx-menu-header {
+  padding: 6px 10px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 6px;
+}
+.ctx-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 13px;
+}
+.ctx-menu-row span { color: var(--text-dim); white-space: nowrap; }
+.ctx-menu-row input[type="text"],
+.ctx-menu-row input:not([type="range"]):not([type="submit"]):not([type="button"]) {
+  flex: 1;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  color: var(--text);
+  font-size: 13px;
+}
+.ctx-menu-row.column { flex-direction: column; align-items: stretch; gap: 6px; padding: 6px; }
+.ctx-menu-row-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
+.ctx-menu-row-header span { color: var(--text-dim); }
+.ctx-menu-vol-value { color: var(--text) !important; font-weight: 600; }
+.ctx-menu-row input[type="range"] { width: 100%; accent-color: var(--purple); cursor: pointer; }
+.ctx-menu-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding: 6px 4px 2px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 6px;
+}
+
+/* ============================================
+   Incoming call modal
+   ============================================ */
+.incoming-call-overlay {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  z-index: 2000;
+  pointer-events: none;
+}
+.incoming-call-modal {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-raised, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  pointer-events: all;
+  animation: slide-in 0.2s ease;
+}
+@keyframes slide-in {
+  from { transform: translateX(20px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.incoming-call-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.incoming-call-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.incoming-call-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.incoming-call-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 8px;
+}
+.incoming-call-btn {
+  width: 34px;
+  height: 34px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.incoming-call-btn.accept {
+  background: #2ecc71;
+  color: #fff;
+}
+.incoming-call-btn.accept:hover {
+  background: #27ae60;
+}
+.incoming-call-btn.decline {
+  background: var(--danger, #e04040);
+  color: #fff;
+}
+.incoming-call-btn.decline:hover {
+  background: #c0392b;
+}
+

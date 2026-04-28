@@ -1,0 +1,131 @@
+/* ============================================
+   Friends page
+   ============================================ */
+.friends-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 28px;
+  overflow-y: auto;
+  gap: 20px;
+}
+.friends-header h2 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.friends-add-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.friends-add-input {
+  flex: 1;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+}
+.friends-add-input:focus {
+  border-color: var(--accent);
+}
+.friends-add-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+.friends-add-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.friends-add-error {
+  width: 100%;
+  font-size: 12px;
+  color: var(--danger, #e04040);
+}
+.friends-section {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.friends-section-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+.friends-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+}
+.friends-row.clickable {
+  cursor: pointer;
+}
+.friends-row.clickable:hover {
+  background: var(--surface);
+}
+.friends-row-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--text);
+}
+.friends-row-pending {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.friends-row-actions {
+  display: flex;
+  gap: 6px;
+}
+.friends-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+}
+.friends-btn.accept {
+  background: var(--accent);
+  color: #fff;
+}
+.friends-btn.decline {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.friends-btn.decline:hover {
+  background: var(--danger, #e04040);
+  color: #fff;
+}
+.friends-btn.chat {
+  background: var(--surface);
+  color: var(--text-muted);
+}
+.friends-btn.chat:hover {
+  color: var(--text);
+}
+.friends-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+

@@ -10,10 +10,25 @@ import {
   RemoteTrackPublication,
   Room,
   RoomEvent,
+  ScreenSharePresets,
   Track,
-  VideoQuality,
   createLocalAudioTrack,
 } from "livekit-client";
+
+type ScreenShareQuality = "low" | "medium" | "high";
+
+const SCREEN_SHARE_PRESETS = {
+  low: ScreenSharePresets.h720fps5,
+  medium: ScreenSharePresets.h1080fps15,
+  high: ScreenSharePresets.h1080fps30,
+} as const;
+
+const SCREEN_SHARE_QUALITY_KEY = "lobby_screenshare_quality";
+
+function loadScreenShareQuality(): ScreenShareQuality {
+  const raw = localStorage.getItem(SCREEN_SHARE_QUALITY_KEY);
+  return raw === "low" || raw === "medium" || raw === "high" ? raw : "high";
+}
 import { notify } from "../lib/notify";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
@@ -65,7 +80,7 @@ interface VoiceContextValue {
   screenShareStreams: Record<string, MediaStream>;
   pausedStreams: Set<string>;
   mainStreamIdentity: string | null;
-  streamQualities: Record<string, "high" | "medium" | "low">;
+  screenShareQuality: ScreenShareQuality;
   connect: (authToken: string, serverId: string, roomId: string, roomName: string) => Promise<void>;
   connectDM: (lkToken: string, url: string, roomName: string) => Promise<void>;
   disconnect: () => void;
@@ -73,7 +88,7 @@ interface VoiceContextValue {
   toggleDeafen: () => Promise<void>;
   toggleScreenShare: () => Promise<void>;
   toggleStreamPaused: (identity: string) => void;
-  setStreamQuality: (identity: string, quality: "high" | "medium" | "low") => void;
+  setScreenShareQuality: (quality: ScreenShareQuality) => Promise<void>;
   setMainStream: (identity: string) => void;
   changeDevice: (deviceId: string) => Promise<void>;
   setVolumeAll: (v: number) => void;
@@ -188,7 +203,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
   const [screenShareStreams, setScreenShareStreams] = useState<Record<string, MediaStream>>({});
   const [pausedStreams, setPausedStreams] = useState<Set<string>>(new Set());
   const [mainStreamIdentity, setMainStreamIdentity] = useState<string | null>(null);
-  const [streamQualities, setStreamQualities] = useState<Record<string, "high" | "medium" | "low">>({});
+  const [screenShareQuality, setScreenShareQualityState] = useState<ScreenShareQuality>(loadScreenShareQuality);
+  const screenShareQualityRef = useRef(screenShareQuality);
+  useEffect(() => { screenShareQualityRef.current = screenShareQuality; }, [screenShareQuality]);
   const screenSharePubsRef = useRef<Map<string, RemoteTrackPublication>>(new Map());
   const noiseRef = useRef(noiseSuppression);
   const echoRef = useRef(echoCancellation);
@@ -277,7 +294,6 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     setScreenShareStreams({});
     setPausedStreams(new Set());
     setMainStreamIdentity(null);
-    setStreamQualities({});
     screenSharePubsRef.current.clear();
     userWantsMutedRef.current = false;
     pttActiveRef.current = false;
@@ -503,18 +519,22 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const room = roomRef.current;
     if (!room) return;
     const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    const enabling = !pub?.track;
     try {
-      await room.localParticipant.setScreenShareEnabled(!pub?.track);
+      if (enabling) {
+        const preset = SCREEN_SHARE_PRESETS[screenShareQualityRef.current];
+        await room.localParticipant.setScreenShareEnabled(
+          true,
+          { resolution: preset.resolution, contentHint: "motion" },
+          { videoEncoding: preset.encoding }
+        );
+      } else {
+        await room.localParticipant.setScreenShareEnabled(false);
+      }
     } catch {
       // User cancelled or permission denied
     }
   }
-
-  const QUALITY_MAP = {
-    high: VideoQuality.HIGH,
-    medium: VideoQuality.MEDIUM,
-    low: VideoQuality.LOW,
-  } as const;
 
   function toggleStreamPaused(identity: string) {
     const pub = screenSharePubsRef.current.get(identity);
@@ -528,10 +548,24 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     });
   }
 
-  function setStreamQuality(identity: string, quality: "high" | "medium" | "low") {
-    const pub = screenSharePubsRef.current.get(identity);
-    try { if (pub) pub.setVideoQuality(QUALITY_MAP[quality]); } catch {}
-    setStreamQualities((prev) => ({ ...prev, [identity]: quality }));
+  async function setScreenShareQuality(quality: ScreenShareQuality) {
+    setScreenShareQualityState(quality);
+    localStorage.setItem(SCREEN_SHARE_QUALITY_KEY, quality);
+    const room = roomRef.current;
+    if (!room) return;
+    const pub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    if (!pub?.track) return;
+    const preset = SCREEN_SHARE_PRESETS[quality];
+    try {
+      await room.localParticipant.setScreenShareEnabled(false);
+      await room.localParticipant.setScreenShareEnabled(
+        true,
+        { resolution: preset.resolution, contentHint: "motion" },
+        { videoEncoding: preset.encoding }
+      );
+    } catch {
+      // User cancelled re-share or permission lost
+    }
   }
 
   function setMainStream(identity: string) {
@@ -778,9 +812,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       volume, audioDevices, selectedDevice, localMicTrack, error,
       nicknames, userVolumes, pttKey, muteKey, deafenKey,
       localQuality, rtt, noiseSuppression, echoCancellation, autoGainControl,
-      isScreenSharing, screenShareStreams, pausedStreams, mainStreamIdentity, streamQualities,
+      isScreenSharing, screenShareStreams, pausedStreams, mainStreamIdentity, screenShareQuality,
       connect, connectDM, disconnect, toggleMute, toggleDeafen, toggleScreenShare,
-      toggleStreamPaused, setStreamQuality, setMainStream, changeDevice, setVolumeAll,
+      toggleStreamPaused, setScreenShareQuality, setMainStream, changeDevice, setVolumeAll,
       setNickname, setUserVolume, setPttKey, setMuteKey, setDeafenKey,
       setNoiseSuppression, setEchoCancellation, setAutoGainControl, loadAudioDevices,
     }}>

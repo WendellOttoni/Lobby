@@ -1,0 +1,130 @@
+/* ============================================
+   DM page
+   ============================================ */
+.dm-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+.dm-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dm-header-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dm-header-actions {
+  display: flex;
+  gap: 8px;
+}
+.dm-call-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.dm-call-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.dm-call-btn.active {
+  background: var(--danger, #e04040);
+  border-color: transparent;
+  color: #fff;
+}
+.dm-call-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.dm-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dm-msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 0;
+}
+.dm-msg.grouped {
+  padding-left: 42px;
+}
+.dm-msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+.dm-msg-author {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.dm-msg-content {
+  font-size: 14px;
+  color: var(--text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.dm-msg-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.dm-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.dm-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+}
+.dm-input:focus {
+  border-color: var(--accent);
+}
+.dm-send-btn {
+  width: 36px;
+  height: 36px;
+  background: var(--accent);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dm-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+

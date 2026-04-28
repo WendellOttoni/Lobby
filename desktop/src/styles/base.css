@@ -1,0 +1,87 @@
+:root {
+  --titlebar-h: 32px;
+
+  /* surfaces — warm dark, not cold gray */
+  --bg:            #0e0b14;
+  --bg-2:          #120f1a;
+  --surface:       #191523;
+  --surface-2:     #221c31;
+  --surface-3:     #2a2340;
+  --border:        #2a2338;
+  --border-subtle: #1f1a2b;
+
+  /* text */
+  --text:       #f2eef9;
+  --text-dim:   #8e86a5;
+  --text-muted: #565072;
+
+  /* brand — the logo gradient */
+  --cyan:    #22d3ee;
+  --purple:  #a78bfa;
+  --magenta: #e040fb;
+  --brand:   linear-gradient(135deg, #22d3ee 0%, #a78bfa 45%, #e040fb 100%);
+  --brand-glow: 0 8px 28px rgba(168, 85, 247, 0.35);
+
+  /* semantic */
+  --good:   #4ade80;
+  --warn:   #fbbf24;
+  --danger: #fb7185;
+
+  /* type */
+  --font:    'Inter', system-ui, sans-serif;
+  --display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
+  --mono:    'JetBrains Mono', monospace;
+
+  font-family: var(--font);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100vh;
+  width: 100%;
+  font-family: var(--font);
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background:
+    radial-gradient(ellipse 50% 40% at 10% 0%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 40% 30% at 90% 100%, rgba(224, 64, 251, 0.07) 0%, transparent 60%),
+    var(--bg);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+button { font-family: var(--font); cursor: pointer; border: none; background: transparent; color: inherit; }
+button:disabled { cursor: not-allowed; opacity: 0.5; }
+input, select, textarea { font-family: var(--font); }
+a { color: var(--purple); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+.brand-text {
+  background: var(--brand);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.error {
+  color: var(--danger);
+  font-size: 14px;
+  margin: 0;
+}
+
+@keyframes pulse-soft { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+@keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+@keyframes float-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+

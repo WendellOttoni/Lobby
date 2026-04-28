@@ -1,4 +1,4 @@
-import { Suspense, lazy } from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import { VoiceProvider, useVoice } from "./contexts/VoiceContext";
@@ -23,6 +23,10 @@ function RouteFallback() {
       Carregando…
     </div>
   );
+}
+
+function RouteBoundary({ children }: { children: React.ReactNode }) {
+  return <ErrorBoundary>{children}</ErrorBoundary>;
 }
 
 function AppShell() {
@@ -52,16 +56,16 @@ function App() {
             <AppTitleBar />
             <Suspense fallback={<RouteFallback />}>
               <Routes>
-                <Route path="/overlay" element={<OverlayPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/overlay" element={<RouteBoundary><OverlayPage /></RouteBoundary>} />
+                <Route path="/login" element={<RouteBoundary><LoginPage /></RouteBoundary>} />
+                <Route path="/register" element={<RouteBoundary><RegisterPage /></RouteBoundary>} />
                 <Route element={<AppShell />}>
-                  <Route path="/servers/:serverId" element={<ServerPage />} />
-                  <Route path="/servers" element={<ServerPage />} />
-                  <Route path="/dm" element={<FriendsPage />} />
-                  <Route path="/dm/:userId" element={<DMPage />} />
+                  <Route path="/servers/:serverId" element={<RouteBoundary><ServerPage /></RouteBoundary>} />
+                  <Route path="/servers" element={<RouteBoundary><ServerPage /></RouteBoundary>} />
+                  <Route path="/dm" element={<RouteBoundary><FriendsPage /></RouteBoundary>} />
+                  <Route path="/dm/:userId" element={<RouteBoundary><DMPage /></RouteBoundary>} />
                 </Route>
-                <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
+                <Route path="/settings" element={<ProtectedRoute><RouteBoundary><SettingsPage /></RouteBoundary></ProtectedRoute>} />
                 <Route path="*" element={<Navigate to="/servers" replace />} />
               </Routes>
             </Suspense>

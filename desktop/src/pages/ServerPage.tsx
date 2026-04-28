@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useVoice } from "../contexts/VoiceContext";
@@ -7,13 +7,13 @@ import { ChatPanel } from "../components/ChatPanel";
 import { MemberList } from "../components/MemberList";
 import { VoiceBar } from "../components/VoiceBar";
 import { LogoMark } from "../components/LogoMark";
-import { Avatar } from "../components/Avatar";
-import { WaveBars } from "../components/WaveBars";
 import { Ico } from "../components/icons";
 import { ParticipantContextMenu } from "../components/ParticipantContextMenu";
 import { PinsModal } from "../components/PinsModal";
 import { ItemContextMenu, ItemMenuState, ServerAdminModal, TransferModal } from "../components/ServerModals";
 import { ScreenShareView } from "../components/ScreenShareView";
+import { InvitePanel } from "../components/server/InvitePanel";
+import { ChannelTree } from "../components/server/ChannelTree";
 import { useVisiblePolling } from "../lib/usePolling";
 import { isChannelMuted, isServerMuted, setChannelMuted, setServerMuted } from "../lib/mute";
 
@@ -85,9 +85,6 @@ export function ServerPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
-  const [inviteMaxUses, setInviteMaxUses] = useState("");
-  const [inviteExpiresHours, setInviteExpiresHours] = useState("");
-  const [copiedMsg, setCopiedMsg] = useState<string | null>(null);
   const [showTransfer, setShowTransfer] = useState(false);
   const [showAdmin, setShowAdmin] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{
@@ -231,12 +228,6 @@ export function ServerPage() {
     });
     return () => { cancelled = true; };
   }, [token, serverId, rooms, voice.activeRoomId, voice.activeServerId]);
-
-  function copy(text: string, label: string) {
-    navigator.clipboard.writeText(text);
-    setCopiedMsg(label);
-    setTimeout(() => setCopiedMsg(null), 2000);
-  }
 
   function switchChannel(id: string | null) {
     if (id === currentChannelId) return;
@@ -444,13 +435,10 @@ export function ServerPage() {
     }
   }
 
-  async function handleResetInvite() {
+  async function handleResetInvite(opts: { maxUses: number | null; expiresInHours: number | null }) {
     if (!token || !serverId) return;
     try {
-      const invite = await api.resetInvite(token, serverId, {
-        maxUses: inviteMaxUses.trim() ? Number(inviteMaxUses) : null,
-        expiresInHours: inviteExpiresHours.trim() ? Number(inviteExpiresHours) : null,
-      });
+      const invite = await api.resetInvite(token, serverId, opts);
       const newCode = invite.inviteCode;
       setInviteCode(newCode);
       setServer((prev) => prev ? {
@@ -508,37 +496,6 @@ export function ServerPage() {
     await voice.connect(token, serverId, room.id, room.name);
   }
 
-  const filteredRooms = useMemo(
-    () => rooms.filter((r) => (search ? r.name.toLowerCase().includes(search.toLowerCase()) : true)),
-    [rooms, search]
-  );
-  const filteredChannels = useMemo(
-    () => channels.filter((c) => (search ? c.name.toLowerCase().includes(search.toLowerCase()) : true)),
-    [channels, search]
-  );
-  const showGeneralChannel = !search || "geral".includes(search.toLowerCase());
-
-  // Group items by category. Items without categoryId or with non-existent categoryId go to "uncategorized".
-  const categoryIds = useMemo(() => new Set(categories.map((c) => c.id)), [categories]);
-  const channelsByCategory = useMemo(() => {
-    const map = new Map<string | null, TextChannel[]>();
-    for (const c of filteredChannels) {
-      const key = c.categoryId && categoryIds.has(c.categoryId) ? c.categoryId : null;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(c);
-    }
-    return map;
-  }, [filteredChannels, categoryIds]);
-  const roomsByCategory = useMemo(() => {
-    const map = new Map<string | null, Room[]>();
-    for (const r of filteredRooms) {
-      const key = r.categoryId && categoryIds.has(r.categoryId) ? r.categoryId : null;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(r);
-    }
-    return map;
-  }, [filteredRooms, categoryIds]);
-
   const currentChannel = channels.find((c) => c.id === currentChannelId) ?? null;
   const activeChannelName = currentChannel?.name ?? "geral";
   const currentChannelMuted = serverId ? isChannelMuted(serverId, currentChannelId) : false;
@@ -549,254 +506,6 @@ export function ServerPage() {
     return <div className="server-loading">Carregando...</div>;
   }
 
-  function renderChannelRow(c: TextChannel) {
-    const unread = c.unreadCount ?? 0;
-    const showBadge = unread > 0 && currentChannelId !== c.id;
-    const isEditing = editingChannelId === c.id;
-    return (
-      <div
-        key={c.id}
-        className={`channel-row${currentChannelId === c.id ? " active" : ""}${showBadge ? " unread" : ""}`}
-        onClick={() => !isEditing && switchChannel(c.id)}
-        onContextMenu={canManageServer ? (e) => {
-          e.preventDefault();
-          setItemMenu({ type: "channel", id: c.id, x: e.clientX, y: e.clientY });
-        } : undefined}
-      >
-        <div className="channel-row-head">
-          <span className="channel-row-icon"><Ico.hash /></span>
-          {isEditing ? (
-            <input
-              className="channel-row-edit-input"
-              value={editDraft}
-              onChange={(e) => setEditDraft(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => commitRenameChannel(c.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitRenameChannel(c.id);
-                else if (e.key === "Escape") { setEditingChannelId(null); setEditDraft(""); }
-              }}
-              maxLength={64}
-              autoFocus
-            />
-          ) : (
-            <span className="channel-row-name">{c.name}</span>
-          )}
-          {showBadge && !isEditing && (
-            <span className="channel-row-unread">{unread > 99 ? "99+" : unread}</span>
-          )}
-          {canManageServer && !isEditing && (
-            <button
-              className="channel-row-menu-btn"
-              title="Opções do canal"
-              onClick={(e) => {
-                e.stopPropagation();
-                setItemMenu({ type: "channel", id: c.id, x: e.clientX, y: e.clientY });
-              }}
-            >
-              ⋯
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  function renderRoomRow(room: Room) {
-    const isActive = voice.activeRoomId === room.id && voice.activeServerId === serverId;
-    const previewParticipants = roomPreviews[room.id] ?? [];
-    const hasParticipants = isActive ? voice.participants.length > 0 : previewParticipants.length > 0;
-    const isLive = room.onlineCount > 0 || isActive;
-    const isEditing = editingRoomId === room.id;
-
-    return (
-      <div
-        key={room.id}
-        className={`channel-row${isActive ? " active" : ""}`}
-        onClick={() => !isActive && !isEditing && handleEnterRoom(room)}
-        onContextMenu={canManageServer ? (e) => {
-          e.preventDefault();
-          setItemMenu({ type: "room", id: room.id, x: e.clientX, y: e.clientY });
-        } : undefined}
-      >
-        <div className="channel-row-head">
-          <span className="channel-row-icon">
-            <Ico.wave />
-          </span>
-          {isEditing ? (
-            <input
-              className="channel-row-edit-input"
-              value={editDraft}
-              onChange={(e) => setEditDraft(e.target.value)}
-              onClick={(e) => e.stopPropagation()}
-              onBlur={() => commitRenameRoom(room.id)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitRenameRoom(room.id);
-                else if (e.key === "Escape") { setEditingRoomId(null); setEditDraft(""); }
-              }}
-              maxLength={64}
-              autoFocus
-            />
-          ) : (
-            <span className="channel-row-name">{room.name}</span>
-          )}
-
-          {!isEditing && (
-            isLive && isActive ? (
-              <WaveBars live color="var(--good)" count={4} />
-            ) : isLive ? (
-              <span className="channel-row-voice-count online">
-                {room.onlineCount}
-              </span>
-            ) : (
-              <span className="channel-row-join">Entrar</span>
-            )
-          )}
-          {canManageServer && !isEditing && (
-            <button
-              className="channel-row-menu-btn"
-              title="Opções da sala"
-              onClick={(e) => {
-                e.stopPropagation();
-                setItemMenu({ type: "room", id: room.id, x: e.clientX, y: e.clientY });
-              }}
-            >
-              ⋯
-            </button>
-          )}
-        </div>
-
-        {hasParticipants && !isEditing && (
-          <div className="channel-row-voice-members">
-            {isActive
-              ? voice.participants.map((p) => (
-                  <div
-                    key={p.identity}
-                    className={`channel-row-voice-member${p.isSpeaking ? " speaking" : ""}`}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (p.isLocal) return;
-                      setCtxMenu({ identity: p.identity, name: p.name, x: e.clientX, y: e.clientY });
-                    }}
-                    title={p.isLocal ? "Você" : "Clique direito para ajustar volume/apelido"}
-                  >
-                    <Avatar
-                      name={p.name}
-                      id={p.identity}
-                      size={22}
-                      speaking={p.isSpeaking && !p.isMuted}
-                      muted={p.isMuted}
-                    />
-                    <span className="channel-row-voice-member-name">
-                      {voice.nicknames[p.identity] || p.name}
-                    </span>
-                    <span className={`channel-row-voice-member-mic${p.isMuted ? " muted" : ""}`}>
-                      {p.isMuted ? <Ico.micOff /> : <Ico.mic />}
-                    </span>
-                  </div>
-                ))
-              : previewParticipants.map((p) => (
-                  <div
-                    key={p.identity}
-                    className="channel-row-voice-member preview"
-                    title={p.name}
-                  >
-                    <Avatar name={p.name} id={p.identity} size={22} />
-                    <span className="channel-row-voice-member-name">{p.name}</span>
-                  </div>
-                ))}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function renderCategorySection(catId: string | null, label: string, isCustomCategory: boolean) {
-    const channelsHere = channelsByCategory.get(catId) ?? [];
-    const roomsHere = roomsByCategory.get(catId) ?? [];
-    const cat = catId ? categories.find((c) => c.id === catId) : null;
-    const isCollapsed = catId !== null && collapsedCategories.has(catId);
-    const isEditingCat = editingCategoryId === catId;
-
-    if (!isCustomCategory && channelsHere.length === 0 && roomsHere.length === 0 && !showGeneralChannel) {
-      return null;
-    }
-
-    return (
-      <div key={catId ?? "uncategorized"} className="rooms-category-section">
-        {(isCustomCategory || (catId === null && categories.length > 0)) && (
-          <div
-            className="rooms-section-label"
-            onContextMenu={canManageServer && cat ? (e) => {
-              e.preventDefault();
-              setItemMenu({ type: "category", id: cat.id, x: e.clientX, y: e.clientY });
-            } : undefined}
-          >
-            <button
-              className="rooms-section-label-text"
-              onClick={() => catId && toggleCategoryCollapsed(catId)}
-              style={{ background: "none", border: "none", padding: 0, cursor: catId ? "pointer" : "default" }}
-            >
-              <span style={{ display: "inline-flex", transform: isCollapsed ? "rotate(-90deg)" : "none", transition: "transform 0.15s" }}>
-                <Ico.chev />
-              </span>
-              {isEditingCat && cat ? (
-                <input
-                  className="channel-row-edit-input"
-                  value={editDraft}
-                  onChange={(e) => setEditDraft(e.target.value)}
-                  onClick={(e) => e.stopPropagation()}
-                  onBlur={() => commitRenameCategory(cat.id)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitRenameCategory(cat.id);
-                    else if (e.key === "Escape") { setEditingCategoryId(null); setEditDraft(""); }
-                  }}
-                  maxLength={64}
-                  autoFocus
-                />
-              ) : (
-                label
-              )}
-            </button>
-            {canManageServer && cat && (
-              <button
-                className="rooms-section-add"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setItemMenu({ type: "category", id: cat.id, x: e.clientX, y: e.clientY });
-                }}
-                title="Opções da categoria"
-              >
-                ⋯
-              </button>
-            )}
-          </div>
-        )}
-
-        {!isCollapsed && (
-          <>
-            {catId === null && showGeneralChannel && (
-              <button
-                className={`channel-row${currentChannelId === null ? " active" : ""}${generalUnread > 0 && currentChannelId !== null ? " unread" : ""}`}
-                onClick={() => switchChannel(null)}
-              >
-                <div className="channel-row-head">
-                  <span className="channel-row-icon"><Ico.hash /></span>
-                  <span className="channel-row-name">geral</span>
-                  {generalUnread > 0 && currentChannelId !== null && (
-                    <span className="channel-row-unread">{generalUnread > 99 ? "99+" : generalUnread}</span>
-                  )}
-                </div>
-              </button>
-            )}
-            {channelsHere.map(renderChannelRow)}
-            {roomsHere.map(renderRoomRow)}
-          </>
-        )}
-      </div>
-    );
-  }
 
   return (
     <div className="server-content">
@@ -899,59 +608,14 @@ export function ServerPage() {
 
         <div className="rooms-scroll">
           {showInvite && (
-            <div className="invite-box">
-              <span style={{ color: "var(--text-dim)" }}>Código de convite:</span>
-              <code>{inviteCode}</code>
-              <span style={{ color: "var(--text-dim)", fontSize: 12 }}>
-                Usos: {server?.inviteUses ?? 0}{server?.inviteMaxUses ? `/${server.inviteMaxUses}` : ""}
-                {server?.inviteExpiresAt ? ` · expira em ${new Date(server.inviteExpiresAt).toLocaleString("pt-BR")}` : ""}
-              </span>
-              <div className="invite-box-actions">
-                <button
-                  onClick={() => copy(inviteCode, "Código copiado!")}
-                  className="btn-secondary"
-                >
-                  Copiar código
-                </button>
-                <button
-                  onClick={() => copy(`lobby://join/${inviteCode}`, "Link copiado!")}
-                  className="btn-secondary"
-                >
-                  Copiar link
-                </button>
-                <button
-                  onClick={toggleCurrentChannelMuted}
-                  className="btn-secondary"
-                >
-                  {currentChannelMuted ? "Ativar canal" : "Silenciar canal"}
-                </button>
-                {isOwner && (
-                  <>
-                    <input
-                      value={inviteMaxUses}
-                      onChange={(e) => setInviteMaxUses(e.target.value.replace(/\D/g, ""))}
-                      placeholder="Usos máx."
-                      style={{ width: 90 }}
-                    />
-                    <input
-                      value={inviteExpiresHours}
-                      onChange={(e) => setInviteExpiresHours(e.target.value.replace(/\D/g, ""))}
-                      placeholder="Expira h"
-                      style={{ width: 90 }}
-                    />
-                    <button
-                      onClick={handleResetInvite}
-                      className="btn-danger-outline"
-                    >
-                      Resetar
-                    </button>
-                  </>
-                )}
-                {copiedMsg && (
-                  <span className="invite-box-confirm">{copiedMsg}</span>
-                )}
-              </div>
-            </div>
+            <InvitePanel
+              server={server}
+              inviteCode={inviteCode}
+              isOwner={isOwner}
+              currentChannelMuted={currentChannelMuted}
+              onResetInvite={handleResetInvite}
+              onToggleCurrentChannelMuted={toggleCurrentChannelMuted}
+            />
           )}
 
           {showNewCategory && (
@@ -1027,17 +691,34 @@ export function ServerPage() {
             </p>
           )}
 
-          {/* Uncategorized first */}
-          {renderCategorySection(null, "Geral", false)}
-
-          {/* Custom categories */}
-          {categories.map((cat) => renderCategorySection(cat.id, cat.name, true))}
-
-          {filteredRooms.length === 0 && filteredChannels.length === 0 && !search && categories.length === 0 && (
-            <p style={{ padding: "14px 10px", fontSize: 12, color: "var(--text-muted)" }}>
-              {canManageServer ? "Crie uma categoria, canal ou sala pelo menu ⋯" : "Sem canais ou salas ainda."}
-            </p>
-          )}
+          <ChannelTree
+            serverId={serverId ?? ""}
+            rooms={rooms}
+            channels={channels}
+            categories={categories}
+            generalUnread={generalUnread}
+            currentChannelId={currentChannelId}
+            search={search}
+            canManageServer={canManageServer}
+            collapsedCategories={collapsedCategories}
+            toggleCategoryCollapsed={toggleCategoryCollapsed}
+            onSwitchChannel={switchChannel}
+            onEnterRoom={handleEnterRoom}
+            roomPreviews={roomPreviews}
+            editingChannelId={editingChannelId}
+            editingRoomId={editingRoomId}
+            editingCategoryId={editingCategoryId}
+            setEditingChannelId={setEditingChannelId}
+            setEditingRoomId={setEditingRoomId}
+            setEditingCategoryId={setEditingCategoryId}
+            editDraft={editDraft}
+            setEditDraft={setEditDraft}
+            commitRenameChannel={commitRenameChannel}
+            commitRenameRoom={commitRenameRoom}
+            commitRenameCategory={commitRenameCategory}
+            onParticipantContext={(info) => setCtxMenu(info)}
+            onItemContextMenu={(info) => setItemMenu(info)}
+          />
         </div>
 
         {voice.activeRoomName && <VoiceBar />}
@@ -1132,6 +813,29 @@ export function ServerPage() {
           onSetNickname={(name) => voice.setNickname(ctxMenu.identity, name)}
           onSetVolume={(v) => voice.setUserVolume(ctxMenu.identity, v)}
           onClose={() => setCtxMenu(null)}
+          canModerate={canManageServer && !!token && !!serverId && !!voice.activeRoomId}
+          onForceMute={
+            canManageServer && token && serverId && voice.activeRoomId
+              ? async () => {
+                  try {
+                    await api.voiceForceMuteParticipant(token, serverId, voice.activeRoomId!, ctxMenu.identity);
+                  } catch (err) {
+                    window.alert(err instanceof Error ? err.message : "Falha ao silenciar");
+                  }
+                }
+              : undefined
+          }
+          onDisconnect={
+            canManageServer && token && serverId && voice.activeRoomId
+              ? async () => {
+                  try {
+                    await api.voiceDisconnectParticipant(token, serverId, voice.activeRoomId!, ctxMenu.identity);
+                  } catch (err) {
+                    window.alert(err instanceof Error ? err.message : "Falha ao desconectar");
+                  }
+                }
+              : undefined
+          }
         />
       )}
 

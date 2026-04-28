@@ -49,7 +49,18 @@
       "Bash(git tag *)",
       "Bash(gh run *)",
       "Bash(gh release *)",
-      "Bash(gh secret *)"
+      "Bash(gh secret *)",
+      "Bash(ls desktop/src/styles)",
+      "Bash(ls desktop/src/*.css)",
+      "Bash(wc -l desktop/src/index.css desktop/src/App.css)",
+      "Bash(grep -v \":0$\")",
+      "Bash(sort -t: -k2 -n -r)",
+      "Bash(mkdir -p styles)",
+      "Bash(sed -n '1,87p' App.css)",
+      "Bash(sed -n '88,141p' App.css)",
+      "Bash(sed -n '142,244p' App.css)",
+      "Bash(sed -n '1851,2121p' App.css)",
+      "Bash(npx vite *)"
     ]
   }
 }

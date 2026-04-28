@@ -8,6 +8,9 @@ interface Props {
   onSetNickname: (name: string) => void;
   onSetVolume: (v: number) => void;
   onClose: () => void;
+  canModerate?: boolean;
+  onForceMute?: () => void;
+  onDisconnect?: () => void;
 }
 
 export function ParticipantContextMenu({
@@ -18,6 +21,9 @@ export function ParticipantContextMenu({
   onSetNickname,
   onSetVolume,
   onClose,
+  canModerate,
+  onForceMute,
+  onDisconnect,
 }: Props) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [nickname, setNickname] = useState(initialNickname);
@@ -108,6 +114,37 @@ export function ParticipantContextMenu({
             onChange={(e) => handleVolumeChange(parseFloat(e.target.value))}
           />
         </div>
+
+        {canModerate && (onForceMute || onDisconnect) && (
+          <>
+            <div className="ctx-menu-divider" />
+            {onForceMute && (
+              <button
+                type="button"
+                className="ctx-menu-item"
+                onClick={() => {
+                  onForceMute();
+                  onClose();
+                }}
+              >
+                Silenciar microfone
+              </button>
+            )}
+            {onDisconnect && (
+              <button
+                type="button"
+                className="ctx-menu-item ctx-menu-item-danger"
+                onClick={() => {
+                  if (!window.confirm(`Desconectar ${realName} da sala de voz?`)) return;
+                  onDisconnect();
+                  onClose();
+                }}
+              >
+                Desconectar da sala
+              </button>
+            )}
+          </>
+        )}
 
         <div className="ctx-menu-actions">
           <button type="button" className="btn-secondary" onClick={reset}>

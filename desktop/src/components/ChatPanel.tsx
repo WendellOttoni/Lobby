@@ -1,4 +1,4 @@
-import { FormEvent, Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Virtuoso, VirtuosoHandle } from "react-virtuoso";
 import { api, SearchResult, AttachmentMeta } from "../lib/api";
 import { playMessageSound } from "../lib/sounds";
@@ -11,8 +11,8 @@ import {
   sameCalendarDay,
   shouldGroup,
 } from "./MessageItem";
-
-const EmojiPicker = lazy(() => import("./LazyEmojiPicker"));
+import { ChatSearchBar } from "./chat/ChatSearchBar";
+import { MessageInput } from "./chat/MessageInput";
 
 interface Props {
   serverId: string;
@@ -446,74 +446,25 @@ export function ChatPanel({
     }
   }
 
-  function sendForm(e: FormEvent) {
-    e.preventDefault();
-    submitMessage();
-  }
-
   const hasContent = input.trim().length > 0 || pendingAttachments.length > 0;
   const visibleMessages = messages.filter((m) => m.channelId === channelId);
 
   return (
     <div className="chat-panel">
       {searchOpen && (
-        <div className="chat-search-bar">
-          <Ico.search />
-          <input
-            ref={searchInputRef}
-            placeholder="Buscar... ex: from:wendell deploy / has:image / before:2026-01-01"
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); runSearch(e.target.value); }}
-            autoComplete="off"
-          />
-          {searching && <span className="chat-search-spinner">…</span>}
-          <button
-            type="button"
-            className="chat-search-help-btn"
-            title="Ajuda"
-            onClick={() => setShowSearchHelp((v) => !v)}
-          >
-            ?
-          </button>
-          <button
-            type="button"
-            onClick={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); setShowSearchHelp(false); }}
-          >
-            <Ico.close />
-          </button>
-        </div>
-      )}
-      {searchOpen && showSearchHelp && (
-        <div className="chat-search-help">
-          <strong>Filtros:</strong>{" "}
-          <code>from:usuario</code>{" · "}
-          <code>in:nomedocanal</code>{" · "}
-          <code>has:link</code>{" · "}
-          <code>has:image</code>{" · "}
-          <code>before:2026-01-01</code>{" · "}
-          <code>after:2025-12-01</code>
-        </div>
-      )}
-      {searchOpen && searchResults !== null && (
-        <div className="chat-search-results">
-          {searchResults.length === 0 && <p className="chat-search-empty">Nenhum resultado.</p>}
-          {searchResults.map((r) => {
-            const sameChannel = r.channelId === channelId;
-            return (
-              <div
-                key={r.id}
-                className={`chat-search-result${sameChannel ? " jumpable" : ""}`}
-                onClick={sameChannel ? () => { scrollToMessage(r.id); setSearchOpen(false); } : undefined}
-                title={sameChannel ? "Pular para esta mensagem" : "Em outro canal"}
-              >
-                <span className="chat-search-result-author">{r.authorName}</span>
-                <span className="chat-search-result-time">{new Date(r.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-                {!sameChannel && <span className="chat-search-result-elsewhere">em outro canal</span>}
-                <p className="chat-search-result-content">{r.content}</p>
-              </div>
-            );
-          })}
-        </div>
+        <ChatSearchBar
+          channelId={channelId}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          searching={searching}
+          searchResults={searchResults}
+          showSearchHelp={showSearchHelp}
+          setShowSearchHelp={setShowSearchHelp}
+          searchInputRef={searchInputRef}
+          runSearch={runSearch}
+          onClose={() => { setSearchOpen(false); setSearchQuery(""); setSearchResults(null); setShowSearchHelp(false); }}
+          onJumpTo={(id) => { scrollToMessage(id); setSearchOpen(false); }}
+        />
       )}
 
       <div className="chat-header">
@@ -650,145 +601,29 @@ export function ChatPanel({
 
       <TypingBar typers={typers} />
 
-      {replyTo && (
-        <div className="chat-reply-bar">
-          <Ico.reply />
-          <span className="chat-reply-bar-text">
-            Respondendo a <strong>{replyTo.authorName}</strong>:{" "}
-            <em>{replyTo.content.slice(0, 80)}{replyTo.content.length > 80 ? "…" : ""}</em>
-          </span>
-          <button type="button" onClick={() => setReplyTo(null)} title="Cancelar resposta">
-            <Ico.close />
-          </button>
-        </div>
-      )}
-
-      <div className="chat-input-wrap">
-        {mentionQuery !== null && (() => {
-          const suggestions = members
-            .filter((m) => m !== currentUsername && m.toLowerCase().startsWith(mentionQuery.toLowerCase()))
-            .slice(0, 6);
-          if (suggestions.length === 0) return null;
-          return (
-            <div className="chat-mention-list">
-              {suggestions.map((name) => (
-                <button
-                  key={name}
-                  type="button"
-                  className="chat-mention-item"
-                  onClick={() => {
-                    const atIdx = input.lastIndexOf("@");
-                    setInput(input.slice(0, atIdx) + `@${name} `);
-                    setMentionQuery(null);
-                    inputRef.current?.focus();
-                  }}
-                >
-                  @{name}
-                </button>
-              ))}
-            </div>
-          );
-        })()}
-        {showEmoji && (
-          <div className="chat-emoji-popover">
-            <Suspense fallback={<div style={{ height: 340, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>Carregando emojis…</div>}>
-              <EmojiPicker
-                onPick={(emoji) => {
-                  setInput((v) => v + emoji);
-                  setShowEmoji(false);
-                  inputRef.current?.focus();
-                }}
-              />
-            </Suspense>
-          </div>
-        )}
-        {pendingAttachments.length > 0 && (
-          <div className="chat-attachment-preview">
-            {pendingAttachments.map((att, i) => (
-              <div key={att.url} className="chat-attachment-preview-item">
-                {att.mimeType.startsWith("image/") ? (
-                  <img src={att.url} alt={att.filename} />
-                ) : (
-                  <span className="chat-attachment-preview-name">{att.filename}</span>
-                )}
-                <button
-                  type="button"
-                  className="chat-attachment-preview-remove"
-                  onClick={() => setPendingAttachments((prev) => prev.filter((_, j) => j !== i))}
-                  title="Remover"
-                >
-                  <Ico.close />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <form className="chat-input-shell" onSubmit={sendForm}>
-          <input
-            ref={fileInputRef}
-            type="file"
-            style={{ display: "none" }}
-            multiple
-            accept="image/*,video/mp4,application/pdf"
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          <button
-            type="button"
-            className={`chat-input-btn${uploading ? " uploading" : ""}`}
-            title="Anexar arquivo"
-            disabled={uploading || !connected}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <Ico.attach />
-          </button>
-          <textarea
-            ref={inputRef}
-            className="chat-input-textarea"
-            placeholder={connected ? `Escreva em #${channelName}…` : "Conectando..."}
-            value={input}
-            rows={1}
-            onChange={(e) => {
-              const val = e.target.value;
-              setInput(val);
-              notifyTyping();
-              const atIdx = val.lastIndexOf("@");
-              if (atIdx !== -1 && (atIdx === 0 || val[atIdx - 1] === " ")) {
-                setMentionQuery(val.slice(atIdx + 1).split(" ")[0]);
-              } else {
-                setMentionQuery(null);
-              }
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submitMessage();
-              }
-            }}
-            maxLength={2000}
-            disabled={!connected}
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            className={`chat-input-btn${showEmoji ? " active" : ""}`}
-            title="Emoji"
-            onClick={() => setShowEmoji((v) => !v)}
-          >
-            <Ico.emoji />
-          </button>
-          <button
-            type="submit"
-            className={`chat-input-send${hasContent ? " has-content" : ""}`}
-            disabled={!hasContent || !connected}
-            title="Enviar"
-          >
-            <Ico.send />
-          </button>
-        </form>
-        <div className="chat-input-hint">
-          <strong>enter</strong> enviar · <strong>shift+enter</strong> nova linha · <strong>**negrito**</strong> · <strong>_itálico_</strong> · <strong>`código`</strong>
-        </div>
-      </div>
+      <MessageInput
+        channelName={channelName}
+        connected={connected}
+        hasContent={hasContent}
+        input={input}
+        setInput={setInput}
+        inputRef={inputRef}
+        fileInputRef={fileInputRef}
+        uploading={uploading}
+        handleFileSelect={handleFileSelect}
+        showEmoji={showEmoji}
+        setShowEmoji={setShowEmoji}
+        pendingAttachments={pendingAttachments}
+        setPendingAttachments={setPendingAttachments}
+        mentionQuery={mentionQuery}
+        setMentionQuery={setMentionQuery}
+        members={members}
+        currentUsername={currentUsername}
+        replyTo={replyTo}
+        setReplyTo={setReplyTo}
+        notifyTyping={notifyTyping}
+        submitMessage={submitMessage}
+      />
     </div>
   );
 }

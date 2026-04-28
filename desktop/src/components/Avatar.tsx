@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { avatarBg, avatarInitials } from "../lib/avatar";
 
 interface Props {
@@ -10,7 +11,7 @@ interface Props {
   src?: string | null;
 }
 
-export function Avatar({ name, id, size = 32, speaking, muted, color, src }: Props) {
+export const Avatar = memo(function Avatar({ name, id, size = 32, speaking, muted, color, src }: Props) {
   const bg = color ?? avatarBg(id ?? name);
   const initials = avatarInitials(name);
   const classes = ["avatar"];
@@ -30,4 +31,4 @@ export function Avatar({ name, id, size = 32, speaking, muted, color, src }: Pro
       </div>
     </div>
   );
-}
+});

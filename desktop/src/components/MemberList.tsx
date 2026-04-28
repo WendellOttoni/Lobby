@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { api, Member } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { useVisiblePolling } from "../lib/usePolling";
@@ -98,7 +98,7 @@ export function MemberList({ serverId, token, currentUserId, currentUserRole }: 
   );
 }
 
-function MemberRow({
+const MemberRow = memo(function MemberRow({
   member,
   online,
   token,
@@ -197,4 +197,4 @@ function MemberRow({
       )}
     </div>
   );
-}
+});

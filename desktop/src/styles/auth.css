@@ -1,0 +1,54 @@
+/* ============================================
+   Auth pages (Login / Register)
+   ============================================ */
+.auth-page {
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.auth-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 32px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+.auth-card h1 {
+  font-family: var(--display);
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
+.auth-card .auth-sub {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin-bottom: 22px;
+}
+.auth-card form { display: flex; flex-direction: column; gap: 12px; }
+.auth-card label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
+.auth-card input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: var(--text);
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+.auth-card input:focus { outline: none; border-color: var(--purple); }
+.auth-card .btn-primary {
+  background: var(--brand);
+  color: white;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 700;
+  font-size: 14px;
+  box-shadow: var(--brand-glow);
+  margin-top: 6px;
+}
+.auth-card .auth-footer { margin-top: 18px; text-align: center; font-size: 13px; color: var(--text-dim); }
+

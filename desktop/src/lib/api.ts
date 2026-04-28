@@ -333,6 +333,18 @@ export const api = {
       body: JSON.stringify({ name }),
     }),
 
+  voiceDisconnectParticipant: (token: string, serverId: string, roomId: string, identity: string) =>
+    request<void>(`/servers/${serverId}/rooms/${roomId}/participants/${identity}/disconnect`, {
+      method: "POST",
+      token,
+    }),
+
+  voiceForceMuteParticipant: (token: string, serverId: string, roomId: string, identity: string) =>
+    request<void>(`/servers/${serverId}/rooms/${roomId}/participants/${identity}/mute`, {
+      method: "POST",
+      token,
+    }),
+
   listRoomParticipants: (token: string, serverId: string, roomId: string) =>
     request<{ participants: VoiceParticipantPreview[] }>(
       `/servers/${serverId}/rooms/${roomId}/participants`,
