@@ -3,6 +3,15 @@ import { api, Member } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { useVisiblePolling } from "../lib/usePolling";
 
+function formatElapsed(startedAt: number): string {
+  const secs = Math.floor((Date.now() - startedAt) / 1000);
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h${m.toString().padStart(2, "0")}m`;
+  if (m > 0) return `${m}min`;
+  return "agora";
+}
+
 interface Props {
   serverId: string;
   token: string;
@@ -152,6 +161,13 @@ const MemberRow = memo(function MemberRow({
     } catch {}
   }
 
+  const gameSub = online && member.game
+    ? `Jogando ${member.game}${member.gameStartedAt ? ` · ${formatElapsed(member.gameStartedAt)}` : ""}`
+    : null;
+  const statusSub = online && !member.game && (member.statusText || member.statusEmoji)
+    ? `${member.statusEmoji ?? ""}${member.statusEmoji && member.statusText ? " " : ""}${member.statusText ?? ""}`
+    : null;
+
   return (
     <div className={`member-row${online ? "" : " offline"}`} style={{ position: "relative" }}>
       <div className="member-row-avatar-wrap">
@@ -159,12 +175,16 @@ const MemberRow = memo(function MemberRow({
         <span className={`member-row-dot${online ? " online" : ""}`} />
       </div>
       <div className="member-row-info">
-        <div className="member-row-name">{member.username}</div>
-        {online && member.game && (
-          <div className="member-row-sub">Jogando {member.game}</div>
-        )}
-        {online && !member.game && member.statusText && (
-          <div className="member-row-sub">{member.statusText}</div>
+        <div className="member-row-name" style={member.roleColor ? { color: member.roleColor } : undefined}>
+          {member.statusEmoji && !gameSub && !statusSub && (
+            <span style={{ marginRight: 4 }}>{member.statusEmoji}</span>
+          )}
+          {member.username}
+        </div>
+        {gameSub && <div className="member-row-sub">{gameSub}</div>}
+        {!gameSub && statusSub && <div className="member-row-sub">{statusSub}</div>}
+        {!gameSub && !statusSub && member.bio && (
+          <div className="member-row-sub" style={{ opacity: 0.6 }}>{member.bio.slice(0, 60)}{member.bio.length > 60 ? "…" : ""}</div>
         )}
       </div>
       {(canEditRole || canModerate) && (

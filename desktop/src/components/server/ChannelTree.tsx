@@ -110,6 +110,10 @@ export function ChannelTree(props: Props) {
     const unread = c.unreadCount ?? 0;
     const showBadge = unread > 0 && currentChannelId !== c.id;
     const isEditing = editingChannelId === c.id;
+    const systemIcon =
+      c.systemType === "rules" ? <Ico.rules /> :
+      c.systemType === "welcome" ? <Ico.welcome /> :
+      <Ico.hash />;
     return (
       <div
         key={c.id}
@@ -121,7 +125,7 @@ export function ChannelTree(props: Props) {
         } : undefined}
       >
         <div className="channel-row-head">
-          <span className="channel-row-icon"><Ico.hash /></span>
+          <span className="channel-row-icon">{systemIcon}</span>
           {isEditing ? (
             <input
               className="channel-row-edit-input"
@@ -200,7 +204,11 @@ export function ChannelTree(props: Props) {
             isLive && isActive ? (
               <WaveBars live color="var(--good)" count={4} />
             ) : isLive ? (
-              <span className="channel-row-voice-count online">{room.onlineCount}</span>
+              <span className="channel-row-voice-count online">
+                {room.onlineCount}{room.maxUsers ? `/${room.maxUsers}` : ""}
+              </span>
+            ) : room.maxUsers ? (
+              <span className="channel-row-voice-count" style={{ opacity: 0.5 }}>0/{room.maxUsers}</span>
             ) : (
               <span className="channel-row-join">Entrar</span>
             )

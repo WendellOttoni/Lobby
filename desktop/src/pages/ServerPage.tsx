@@ -758,6 +758,8 @@ export function ServerPage() {
             isOwner={canManageServer}
             channelId={currentChannelId}
             channelName={activeChannelName}
+            channelTopic={currentChannel?.topic ?? null}
+            slowMode={currentChannel?.slowMode ?? null}
             onToggleMembers={() => setShowMembers((v) => !v)}
             onOpenPins={() => setShowPins(true)}
             onChannelMessage={onChannelMessage}

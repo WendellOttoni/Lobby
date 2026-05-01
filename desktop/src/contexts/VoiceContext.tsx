@@ -30,6 +30,7 @@ function loadScreenShareQuality(): ScreenShareQuality {
   return raw === "low" || raw === "medium" || raw === "high" ? raw : "high";
 }
 import { notify } from "../lib/notify";
+import { playJoinSound, playLeaveSound } from "../lib/sounds";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
@@ -334,8 +335,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         applyVolumeTo(p);
         snapshotRoom(room);
         notifyParticipantJoined(p.name ?? p.identity);
+        playJoinSound();
       })
-      .on(RoomEvent.ParticipantDisconnected, () => snapshotRoom(room))
+      .on(RoomEvent.ParticipantDisconnected, () => { snapshotRoom(room); playLeaveSound(); })
       .on(RoomEvent.TrackSubscribed, (track: RemoteTrack, pub: RemoteTrackPublication, participant: RemoteParticipant) => {
         if (track.kind === Track.Kind.Audio) {
           const el = track.attach();

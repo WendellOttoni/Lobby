@@ -20,9 +20,12 @@ const moderationRoutes: FastifyPluginAsync = async (fastify) => {
 
     const members = await prisma.serverMember.findMany({
       where: { serverId },
-      include: { user: { select: { id: true, username: true, avatarUrl: true } } },
+      include: { user: { select: { id: true, username: true, avatarUrl: true, bio: true } } },
       orderBy: { joinedAt: "asc" },
     });
+
+    const roleColors = await prisma.serverRole.findMany({ where: { serverId }, select: { name: true, color: true } });
+    const colorMap = new Map(roleColors.map((r) => [r.name, r.color]));
 
     return reply.send({
       members: members.map((m) => {
@@ -32,10 +35,14 @@ const moderationRoutes: FastifyPluginAsync = async (fastify) => {
           id: m.user.id,
           username: m.user.username,
           avatarUrl: m.user.avatarUrl,
+          bio: m.user.bio,
           role: m.role,
+          roleColor: colorMap.get(m.role) ?? null,
           online,
           game: presence?.game ?? null,
+          gameStartedAt: presence?.gameStartedAt ?? null,
           statusText: presence?.statusText ?? null,
+          statusEmoji: presence?.statusEmoji ?? null,
         };
       }),
     });

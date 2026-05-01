@@ -20,6 +20,7 @@ import pinsRoutes from "./routes/pins.js";
 import friendsRoutes from "./routes/friends.js";
 import dmRoutes from "./routes/dm.js";
 import uploadRoutes, { uploadDir } from "./routes/upload.js";
+import rolesRoutes from "./routes/roles.js";
 import prisma from "./db/client.js";
 import { getRoomService } from "./services/livekit.js";
 import { validateEnv } from "./env.js";
@@ -87,6 +88,7 @@ fastify.register(pinsRoutes, { prefix: "/servers" });
 fastify.register(friendsRoutes);
 fastify.register(dmRoutes);
 fastify.register(uploadRoutes);
+fastify.register(rolesRoutes, { prefix: "/servers" });
 
 fastify.get("/health", async (_, reply) => {
   const checks: Record<string, "ok" | "fail"> = {};

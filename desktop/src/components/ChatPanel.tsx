@@ -22,6 +22,8 @@ interface Props {
   isOwner: boolean;
   channelId: string | null;
   channelName: string;
+  channelTopic?: string | null;
+  slowMode?: number | null;
   onToggleMembers?: () => void;
   onOpenPins?: () => void;
   onChannelMessage?: (channelId: string | null, authorId: string) => void;
@@ -44,6 +46,8 @@ export function ChatPanel({
   isOwner,
   channelId,
   channelName,
+  channelTopic,
+  slowMode,
   onToggleMembers,
   onOpenPins,
   onChannelMessage,
@@ -80,6 +84,7 @@ export function ChatPanel({
   const [pendingAttachments, setPendingAttachments] = useState<AttachmentMeta[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [slowModeUntil, setSlowModeUntil] = useState<number | null>(null);
 
   const isAtBottomRef = useRef(true);
   const virtuosoRef = useRef<VirtuosoHandle>(null);
@@ -322,6 +327,14 @@ export function ChatPanel({
             else delete next[data.userId];
             return next;
           });
+        } else if (data.type === "error" && data.code === "SLOW_MODE") {
+          setSlowModeUntil(Date.now() + data.retryAfter * 1000);
+        } else if (data.type === "mention") {
+          if (!muted) playMessageSound();
+          notify(
+            `Você foi mencionado — #${data.channelName ?? "geral"}`,
+            `${data.authorName}: ${(data.content as string).slice(0, 80)}`
+          ).catch(() => {});
         }
       };
     }
@@ -473,7 +486,10 @@ export function ChatPanel({
         </div>
         <div className="chat-header-title">
           <div className="chat-header-name">#{channelName}</div>
-          <div className="chat-header-sub">Canal de texto</div>
+          <div className="chat-header-sub">
+            {channelTopic ? channelTopic : "Canal de texto"}
+            {slowMode ? ` · modo lento ${slowMode}s` : ""}
+          </div>
         </div>
         <div className="chat-header-spacer" />
         <button className="chat-header-btn" title="Fixados" onClick={onOpenPins}>
@@ -623,6 +639,8 @@ export function ChatPanel({
         setReplyTo={setReplyTo}
         notifyTyping={notifyTyping}
         submitMessage={submitMessage}
+        slowModeUntil={slowModeUntil}
+        onSlowModeExpired={() => setSlowModeUntil(null)}
       />
     </div>
   );

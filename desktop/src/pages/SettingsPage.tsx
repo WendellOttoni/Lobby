@@ -85,6 +85,8 @@ export function SettingsPage() {
 function PerfilSection({ user, token, setUser }: { user: User | null; token: string | null; setUser: (u: User) => void }) {
   const [username, setUsername] = useState(user?.username ?? "");
   const [statusText, setStatusText] = useState(user?.statusText ?? "");
+  const [statusEmoji, setStatusEmoji] = useState(user?.statusEmoji ?? "");
+  const [bio, setBio] = useState(user?.bio ?? "");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [avatarUploading, setAvatarUploading] = useState(false);
@@ -100,6 +102,8 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
       const data: Parameters<typeof api.updateMe>[1] = {};
       if (username !== user?.username) data.username = username;
       if ((user?.statusText ?? "") !== statusText) data.statusText = statusText.trim() || null;
+      if ((user?.statusEmoji ?? "") !== statusEmoji) data.statusEmoji = statusEmoji.trim() || null;
+      if ((user?.bio ?? "") !== bio) data.bio = bio.trim() || null;
       if (newPassword) { data.currentPassword = currentPassword; data.newPassword = newPassword; }
       const { user: updated } = await api.updateMe(token, data);
       setUser(updated as User);
@@ -178,10 +182,28 @@ function PerfilSection({ user, token, setUser }: { user: User | null; token: str
           />
           {usernameError && <span className="settings-field-error">{usernameError}</span>}
         </label>
+        <div className="settings-row-2">
+          <label className="settings-label">
+            <span>Emoji de status</span>
+            <input value={statusEmoji} onChange={(e) => setStatusEmoji(e.target.value)} maxLength={8} placeholder="😊" style={{ width: 72 }} />
+          </label>
+          <label className="settings-label" style={{ flex: 1 }}>
+            <span>Status customizado</span>
+            <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={128} placeholder="Ex: Em reunião, AFK, Codando..." />
+            <span className="settings-field-hint">{statusText.length}/128</span>
+          </label>
+        </div>
         <label className="settings-label">
-          <span>Status customizado</span>
-          <input value={statusText} onChange={(e) => setStatusText(e.target.value)} maxLength={128} placeholder="Ex: Em reunião, AFK, Codando..." />
-          <span className="settings-field-hint">{statusText.length}/128</span>
+          <span>Bio</span>
+          <textarea
+            value={bio}
+            onChange={(e) => setBio(e.target.value)}
+            maxLength={512}
+            rows={3}
+            placeholder="Conte um pouco sobre você..."
+            style={{ resize: "vertical" }}
+          />
+          <span className="settings-field-hint">{bio.length}/512</span>
         </label>
         <div className="settings-divider" />
         <h3 className="settings-subsection">Alterar senha</h3>

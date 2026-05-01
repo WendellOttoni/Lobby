@@ -62,6 +62,10 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       createdAt: c.createdAt,
       categoryId: c.categoryId,
       position: c.position,
+      topic: c.topic,
+      slowMode: c.slowMode,
+      isSystem: c.isSystem,
+      systemType: c.systemType,
       unreadCount: unreadByChannel.get(c.id) ?? 0,
     }));
 
@@ -83,20 +87,42 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: "object",
         required: ["name"],
-        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 64 },
+          topic: { type: "string", maxLength: 1024 },
+          slowMode: { type: "integer", minimum: 0, maximum: 21600 },
+          isSystem: { type: "boolean" },
+          systemType: { type: "string", enum: ["rules", "welcome"] },
+          categoryId: { type: "string" },
+        },
       },
     },
     handler: async (request, reply) => {
       const { sub } = request.user as { sub: string };
       const { serverId } = request.params as { serverId: string };
-      const { name } = request.body as { name: string };
+      const { name, topic, slowMode, isSystem, systemType, categoryId } = request.body as {
+        name: string;
+        topic?: string;
+        slowMode?: number;
+        isSystem?: boolean;
+        systemType?: string;
+        categoryId?: string;
+      };
 
       const role = await getServerRole(sub, serverId);
       if (!role) return reply.status(403).send({ error: "Sem acesso" });
       if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para criar canais" });
 
       const channel = await prisma.textChannel.create({
-        data: { name, serverId },
+        data: {
+          name,
+          serverId,
+          topic: topic?.trim() || null,
+          slowMode: slowMode ?? null,
+          isSystem: isSystem ?? false,
+          systemType: systemType ?? null,
+          categoryId: categoryId ?? null,
+        },
       });
 
       return reply.status(201).send({ channel });
@@ -108,25 +134,42 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
     schema: {
       body: {
         type: "object",
-        required: ["name"],
-        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 64 },
+          topic: { type: ["string", "null"], maxLength: 1024 },
+          slowMode: { type: ["integer", "null"], minimum: 0, maximum: 21600 },
+          isSystem: { type: "boolean" },
+          systemType: { type: ["string", "null"] },
+        },
       },
     },
     handler: async (request, reply) => {
       const { sub } = request.user as { sub: string };
       const { serverId, channelId } = request.params as { serverId: string; channelId: string };
-      const { name } = request.body as { name: string };
+      const { name, topic, slowMode, isSystem, systemType } = request.body as {
+        name?: string;
+        topic?: string | null;
+        slowMode?: number | null;
+        isSystem?: boolean;
+        systemType?: string | null;
+      };
 
       const role = await getServerRole(sub, serverId);
       if (!role) return reply.status(403).send({ error: "Sem acesso" });
-      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para renomear canais" });
+      if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para editar canais" });
 
       const channel = await prisma.textChannel.findFirst({ where: { id: channelId, serverId } });
       if (!channel) return reply.status(404).send({ error: "Canal não encontrado" });
 
       const updated = await prisma.textChannel.update({
         where: { id: channelId },
-        data: { name: name.trim() },
+        data: {
+          ...(name !== undefined && { name: name.trim() }),
+          ...(topic !== undefined && { topic: topic?.trim() || null }),
+          ...(slowMode !== undefined && { slowMode: slowMode === 0 ? null : slowMode }),
+          ...(isSystem !== undefined && { isSystem }),
+          ...(systemType !== undefined && { systemType }),
+        },
       });
 
       return reply.send({ channel: updated });
@@ -174,6 +217,35 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
     },
   });
 
+  fastify.get("/:serverId/channels/:channelId/first-unread", async (request, reply) => {
+    const { sub } = request.user as { sub: string };
+    const { serverId, channelId } = request.params as { serverId: string; channelId: string };
+
+    const member = await prisma.serverMember.findUnique({
+      where: { userId_serverId: { userId: sub, serverId } },
+      select: { id: true },
+    });
+    if (!member) return reply.status(403).send({ error: "Sem acesso" });
+
+    const read = await prisma.channelRead.findUnique({
+      where: { userId_channelId: { userId: sub, channelId } },
+    });
+
+    if (!read) return reply.send({ messageId: null });
+
+    const firstUnread = await prisma.message.findFirst({
+      where: {
+        channelId,
+        authorId: { not: sub },
+        createdAt: { gt: read.lastReadAt },
+      },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+
+    return reply.send({ messageId: firstUnread?.id ?? null });
+  });
+
   fastify.get("/:serverId/channels/:channelId/permissions", async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId, channelId } = request.params as { serverId: string; channelId: string };
@@ -196,7 +268,11 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.put("/:serverId/channels/:channelId/permissions/:role", { config: mutateLimit }, async (request, reply) => {
     const { sub } = request.user as { sub: string };
     const { serverId, channelId, role: targetRole } = request.params as { serverId: string; channelId: string; role: string };
-    const { canRead, canWrite } = (request.body ?? {}) as { canRead?: boolean; canWrite?: boolean };
+    const { canRead, canWrite, canReact } = (request.body ?? {}) as {
+      canRead?: boolean;
+      canWrite?: boolean;
+      canReact?: boolean;
+    };
 
     const role = await getServerRole(sub, serverId);
     if (!role) return reply.status(403).send({ error: "Sem acesso" });
@@ -211,8 +287,8 @@ const channelRoutes: FastifyPluginAsync = async (fastify) => {
 
     const permission = await prisma.channelPermission.upsert({
       where: { channelId_role: { channelId, role: targetRole } },
-      create: { serverId, channelId, role: targetRole, canRead, canWrite },
-      update: { canRead, canWrite },
+      create: { serverId, channelId, role: targetRole, canRead, canWrite, canReact: canReact ?? true },
+      update: { canRead, canWrite, ...(canReact !== undefined && { canReact }) },
     });
 
     return reply.send({ permission });

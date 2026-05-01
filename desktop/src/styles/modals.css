@@ -60,8 +60,10 @@
   margin-bottom: 4px;
 }
 .settings-form { display: flex; flex-direction: column; gap: 12px; }
+.settings-row-2 { display: flex; gap: 10px; align-items: flex-start; }
 .settings-label { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--text-dim); }
-.settings-label input {
+.settings-label input,
+.settings-label textarea {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -70,8 +72,11 @@
   font-size: 14px;
   outline: none;
   transition: border-color 0.15s;
+  font-family: inherit;
 }
-.settings-label input:focus { border-color: var(--accent); }
+.settings-label input:focus,
+.settings-label textarea:focus { border-color: var(--accent); }
+.settings-field-hint { font-size: 11px; color: var(--text-muted); }
 .settings-success { color: var(--good); font-size: 13px; }
 
 .settings-form button[type="submit"] {

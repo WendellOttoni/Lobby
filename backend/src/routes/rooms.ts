@@ -47,21 +47,25 @@ const roomsRoutes: FastifyPluginAsync = async (fastify) => {
       body: {
         type: "object",
         required: ["name"],
-        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 64 },
+          maxUsers: { type: "integer", minimum: 0, maximum: 99 },
+          categoryId: { type: "string" },
+        },
       },
     },
     handler: async (request, reply) => {
       const { sub } = request.user as { sub: string };
       const { serverId } = request.params as { serverId: string };
-      const { name } = request.body as { name: string };
+      const { name, maxUsers, categoryId } = request.body as { name: string; maxUsers?: number; categoryId?: string };
 
       const role = await getServerRole(sub, serverId);
       if (!role) return reply.status(403).send({ error: "Sem acesso" });
       if (!canManageServer(role)) return reply.status(403).send({ error: "Sem permissão para criar salas" });
 
       const room = await prisma.room.create({
-        data: { name, serverId },
-        select: { id: true, name: true, createdAt: true },
+        data: { name, serverId, maxUsers: maxUsers ?? null, categoryId: categoryId ?? null },
+        select: { id: true, name: true, createdAt: true, maxUsers: true, categoryId: true },
       });
 
       return reply.status(201).send({ room });
@@ -73,14 +77,16 @@ const roomsRoutes: FastifyPluginAsync = async (fastify) => {
     schema: {
       body: {
         type: "object",
-        required: ["name"],
-        properties: { name: { type: "string", minLength: 1, maxLength: 64 } },
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 64 },
+          maxUsers: { type: ["integer", "null"], minimum: 0, maximum: 99 },
+        },
       },
     },
     handler: async (request, reply) => {
       const { sub } = request.user as { sub: string };
       const { serverId, roomId } = request.params as { serverId: string; roomId: string };
-      const { name } = request.body as { name: string };
+      const { name, maxUsers } = request.body as { name?: string; maxUsers?: number | null };
 
       const role = await getServerRole(sub, serverId);
       if (!role) return reply.status(403).send({ error: "Sem acesso" });
@@ -91,8 +97,11 @@ const roomsRoutes: FastifyPluginAsync = async (fastify) => {
 
       const updated = await prisma.room.update({
         where: { id: roomId },
-        data: { name: name.trim() },
-        select: { id: true, name: true, createdAt: true },
+        data: {
+          ...(name !== undefined && { name: name.trim() }),
+          ...(maxUsers !== undefined && { maxUsers: maxUsers === 0 ? null : maxUsers }),
+        },
+        select: { id: true, name: true, createdAt: true, maxUsers: true, categoryId: true },
       });
 
       return reply.send({ room: updated });
@@ -228,6 +237,14 @@ const roomsRoutes: FastifyPluginAsync = async (fastify) => {
 
     const room = await prisma.room.findFirst({ where: { id: roomId, serverId } });
     if (!room) return reply.status(404).send({ error: "Sala não encontrada" });
+
+    if (room.maxUsers) {
+      const participants = await getRoomService().listParticipants(roomId).catch(() => []);
+      const alreadyIn = participants.some((p) => p.identity === sub);
+      if (!alreadyIn && participants.length >= room.maxUsers) {
+        return reply.status(403).send({ error: "Sala cheia", code: "ROOM_FULL" });
+      }
+    }
 
     const token = new AccessToken(
       process.env.LIVEKIT_API_KEY!,

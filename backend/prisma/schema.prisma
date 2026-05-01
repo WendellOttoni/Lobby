@@ -13,6 +13,8 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   statusText   String?  @db.VarChar(128)
+  statusEmoji  String?  @db.VarChar(8)
+  bio          String?  @db.VarChar(512)
   avatarUrl    String?  @db.VarChar(512)
 
   ownedServers           Server[]             @relation("ServerOwner")
@@ -34,14 +36,16 @@ model User {
 }
 
 model Server {
-  id         String   @id @default(cuid())
-  name       String
-  inviteCode String   @unique
-  inviteUses Int      @default(0)
-  inviteMaxUses Int?
-  inviteExpiresAt DateTime?
-  ownerId    String
-  createdAt  DateTime @default(now())
+  id               String    @id @default(cuid())
+  name             String
+  inviteCode       String    @unique
+  inviteUses       Int       @default(0)
+  inviteMaxUses    Int?
+  inviteExpiresAt  DateTime?
+  ownerId          String
+  createdAt        DateTime  @default(now())
+  rulesChannelId   String?
+  welcomeChannelId String?
 
   owner      User           @relation("ServerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   members    ServerMember[]
@@ -53,6 +57,21 @@ model Server {
   messages   Message[]
   categories Category[]
   channelPermissions ChannelPermission[]
+  roles      ServerRole[]
+  threads    Thread[]
+}
+
+model ServerRole {
+  id       String  @id @default(cuid())
+  serverId String
+  name     String  @db.VarChar(32)
+  color    String? @db.VarChar(7)
+  position Int     @default(0)
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+
+  @@unique([serverId, name])
+  @@index([serverId])
 }
 
 model Category {
@@ -138,6 +157,7 @@ model Room {
   serverId   String
   categoryId String?
   position   Int      @default(0)
+  maxUsers   Int?
   createdAt  DateTime @default(now())
 
   server   Server       @relation(fields: [serverId], references: [id], onDelete: Cascade)
@@ -165,6 +185,10 @@ model TextChannel {
   serverId   String
   categoryId String?
   position   Int      @default(0)
+  topic      String?  @db.VarChar(1024)
+  slowMode   Int?
+  isSystem   Boolean  @default(false)
+  systemType String?  @db.VarChar(32)
   createdAt  DateTime @default(now())
 
   server   Server        @relation(fields: [serverId], references: [id], onDelete: Cascade)
@@ -172,6 +196,7 @@ model TextChannel {
   messages Message[]
   reads    ChannelRead[]
   permissions ChannelPermission[]
+  threads  Thread[]
 
   @@index([serverId])
   @@index([categoryId])
@@ -184,6 +209,7 @@ model ChannelPermission {
   role      String   @db.VarChar(32)
   canRead   Boolean  @default(true)
   canWrite  Boolean  @default(true)
+  canReact  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -205,6 +231,23 @@ model ChannelRead {
 
   @@unique([userId, channelId])
   @@index([channelId])
+}
+
+model Thread {
+  id          String   @id @default(cuid())
+  channelId   String
+  serverId    String
+  parentId    String   @unique
+  title       String?  @db.VarChar(128)
+  createdAt   DateTime @default(now())
+  lastReplyAt DateTime @default(now())
+
+  channel  TextChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  server   Server      @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  messages Message[]   @relation("ThreadMessages")
+
+  @@index([channelId])
+  @@index([serverId])
 }
 
 model MessageReaction {
@@ -285,18 +328,21 @@ model Message {
   serverId    String
   channelId   String?
   replyToId   String?
+  threadId    String?
 
   author      User                @relation(fields: [authorId], references: [id], onDelete: Cascade)
   server      Server              @relation(fields: [serverId], references: [id], onDelete: Cascade)
   channel     TextChannel?        @relation(fields: [channelId], references: [id], onDelete: SetNull)
   replyTo     Message?            @relation("MessageReplies", fields: [replyToId], references: [id], onDelete: SetNull)
   replies     Message[]           @relation("MessageReplies")
+  thread      Thread?             @relation("ThreadMessages", fields: [threadId], references: [id], onDelete: SetNull)
   reactions   MessageReaction[]
   pin         MessagePin?
   attachments MessageAttachment[]
 
   @@index([serverId, createdAt])
   @@index([channelId, createdAt])
+  @@index([threadId, createdAt])
 }
 
 model MessageAttachment {

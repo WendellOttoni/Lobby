@@ -105,7 +105,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
       const user = await prisma.user.findUnique({
         where: { id: sub },
-        select: { id: true, username: true, email: true, createdAt: true, statusText: true, avatarUrl: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true, statusEmoji: true, bio: true, avatarUrl: true },
       });
 
       if (!user) {
@@ -124,10 +124,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const { game } = (request.body ?? {}) as { game?: string | null };
       const user = await prisma.user.findUnique({
         where: { id: sub },
-        select: { username: true, statusText: true },
+        select: { username: true, statusText: true, statusEmoji: true },
       });
       if (!user) return reply.status(404).send({ error: "Usuário não encontrado" });
-      updatePresence(sub, user.username, game ?? null, user.statusText);
+      updatePresence(sub, user.username, game ?? null, user.statusText, user.statusEmoji);
       return reply.status(204).send();
     }
   );
@@ -147,21 +147,40 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     { preHandler: [fastify.authenticate] },
     async (request, reply) => {
       const { sub } = request.user as { sub: string };
-      const { username, currentPassword, newPassword, statusText, avatarUrl } = request.body as {
+      const { username, currentPassword, newPassword, statusText, statusEmoji, bio, avatarUrl } = request.body as {
         username?: string;
         currentPassword?: string;
         newPassword?: string;
         statusText?: string | null;
+        statusEmoji?: string | null;
+        bio?: string | null;
         avatarUrl?: string | null;
       };
 
       const user = await prisma.user.findUniqueOrThrow({ where: { id: sub } });
 
-      const updates: { username?: string; passwordHash?: string; statusText?: string | null; avatarUrl?: string | null } = {};
+      const updates: {
+        username?: string;
+        passwordHash?: string;
+        statusText?: string | null;
+        statusEmoji?: string | null;
+        bio?: string | null;
+        avatarUrl?: string | null;
+      } = {};
 
       if (statusText !== undefined) {
         const trimmed = statusText === null ? null : String(statusText).trim().slice(0, 128);
         updates.statusText = trimmed && trimmed.length > 0 ? trimmed : null;
+      }
+
+      if (statusEmoji !== undefined) {
+        const trimmed = statusEmoji === null ? null : String(statusEmoji).trim().slice(0, 8);
+        updates.statusEmoji = trimmed && trimmed.length > 0 ? trimmed : null;
+      }
+
+      if (bio !== undefined) {
+        const trimmed = bio === null ? null : String(bio).trim().slice(0, 512);
+        updates.bio = trimmed && trimmed.length > 0 ? trimmed : null;
       }
 
       if (avatarUrl !== undefined) {
@@ -205,7 +224,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const updated = await prisma.user.update({
         where: { id: sub },
         data: updates,
-        select: { id: true, username: true, email: true, createdAt: true, statusText: true, avatarUrl: true },
+        select: { id: true, username: true, email: true, createdAt: true, statusText: true, statusEmoji: true, bio: true, avatarUrl: true },
       });
 
       return reply.send({ user: updated });

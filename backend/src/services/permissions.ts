@@ -41,3 +41,15 @@ export async function canWriteChannel(userId: string, serverId: string, channelI
   });
   return (permission?.canRead ?? true) && (permission?.canWrite ?? true);
 }
+
+export async function canReactChannel(userId: string, serverId: string, channelId: string | null): Promise<boolean> {
+  if (!channelId) return !!(await getServerRole(userId, serverId));
+  const role = await getServerRole(userId, serverId);
+  if (!role) return false;
+  if (bypassChannelPermission(role)) return true;
+  const permission = await prisma.channelPermission.findUnique({
+    where: { channelId_role: { channelId, role } },
+    select: { canRead: true, canReact: true },
+  });
+  return (permission?.canRead ?? true) && (permission?.canReact ?? true);
+}

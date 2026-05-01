@@ -15,6 +15,21 @@ function getCtx(): AudioContext {
   return ctx;
 }
 
+function playTone(freq: number, duration: number, startGain = 0.15) {
+  try {
+    const ac = getCtx();
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    osc.connect(gain);
+    gain.connect(ac.destination);
+    osc.frequency.setValueAtTime(freq, ac.currentTime);
+    gain.gain.setValueAtTime(startGain, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + duration);
+  } catch {}
+}
+
 export function playMessageSound() {
   if (!isSoundEnabled()) return;
   try {
@@ -30,4 +45,18 @@ export function playMessageSound() {
     osc.start(ac.currentTime);
     osc.stop(ac.currentTime + 0.18);
   } catch {}
+}
+
+export function playJoinSound() {
+  if (!isSoundEnabled()) return;
+  // two ascending tones: 440 → 660
+  playTone(440, 0.09);
+  setTimeout(() => playTone(660, 0.12), 100);
+}
+
+export function playLeaveSound() {
+  if (!isSoundEnabled()) return;
+  // two descending tones: 660 → 440
+  playTone(660, 0.09);
+  setTimeout(() => playTone(440, 0.12), 100);
 }

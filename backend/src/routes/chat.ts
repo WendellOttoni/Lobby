@@ -1,7 +1,8 @@
 import { FastifyPluginAsync } from "fastify";
 import { WebSocket } from "@fastify/websocket";
 import prisma from "../db/client.js";
-import { canManageServer, canReadChannel, canWriteChannel, getServerRole } from "../services/permissions.js";
+import { canManageServer, canReadChannel, canReactChannel, canWriteChannel, getServerRole } from "../services/permissions.js";
+import { getOnlineUserIds } from "../services/presence.js";
 
 interface ReactionCount {
   emoji: string;
@@ -40,6 +41,18 @@ interface ChatMessage {
 interface RateBucket {
   tokens: number;
   lastRefill: number;
+}
+
+// slow mode: userId -> channelId -> last message timestamp
+const slowModeCache = new Map<string, Map<string, number>>();
+
+function getLastMessageTime(userId: string, channelId: string): number {
+  return slowModeCache.get(userId)?.get(channelId) ?? 0;
+}
+
+function setLastMessageTime(userId: string, channelId: string) {
+  if (!slowModeCache.has(userId)) slowModeCache.set(userId, new Map());
+  slowModeCache.get(userId)!.set(channelId, Date.now());
 }
 
 interface Connection {
@@ -362,16 +375,32 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               return;
             }
 
+            let channelSlowMode: number | null = null;
             if (channelId) {
               const channel = await prisma.textChannel.findUnique({ where: { id: channelId } });
               if (!channel || channel.serverId !== serverId) {
                 sendError("Canal inválido.");
                 return;
               }
+              channelSlowMode = channel.slowMode ?? null;
             }
             if (!(await canWriteChannel(userId, serverId, channelId))) {
               sendError("Sem permissão para enviar neste canal.");
               return;
+            }
+
+            // slow mode enforcement (cache-based)
+            if (channelId && channelSlowMode && channelSlowMode > 0) {
+              const memberRole = await getServerRole(userId, serverId);
+              if (!canManageServer(memberRole)) {
+                const lastTime = getLastMessageTime(userId, channelId);
+                const elapsed = (Date.now() - lastTime) / 1000;
+                if (elapsed < channelSlowMode) {
+                  const retryAfter = Math.ceil(channelSlowMode - elapsed);
+                  sendError(`Slow mode ativo. Aguarde ${retryAfter}s.`, "SLOW_MODE", retryAfter);
+                  return;
+                }
+              }
             }
 
             if (replyToId) {
@@ -406,7 +435,42 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
               include: MESSAGE_INCLUDE,
             });
 
+            if (channelId && channelSlowMode && channelSlowMode > 0) {
+              setLastMessageTime(userId, channelId);
+            }
+
             broadcastMessage(serverId, serialize(msg));
+
+            // @everyone / @here notifications
+            if (content.includes("@everyone") || content.includes("@here")) {
+              const memberRole = await getServerRole(userId, serverId);
+              if (canManageServer(memberRole)) {
+                const isHere = content.includes("@here") && !content.includes("@everyone");
+                let targetUserIds: string[];
+                if (isHere) {
+                  const allMembers = await prisma.serverMember.findMany({ where: { serverId }, select: { userId: true } });
+                  const onlineIds = new Set(getOnlineUserIds());
+                  targetUserIds = allMembers.map((m) => m.userId).filter((id) => onlineIds.has(id) && id !== userId);
+                } else {
+                  const allMembers = await prisma.serverMember.findMany({ where: { serverId }, select: { userId: true } });
+                  targetUserIds = allMembers.map((m) => m.userId).filter((id) => id !== userId);
+                }
+                const mentionPayload = JSON.stringify({
+                  type: "mention",
+                  kind: isHere ? "here" : "everyone",
+                  messageId: msg.id,
+                  channelId,
+                  authorId: userId,
+                  authorName: username,
+                });
+                rooms.get(serverId)?.forEach((conn) => {
+                  if (targetUserIds.includes(conn.userId)) {
+                    conn.ws.send(mentionPayload);
+                  }
+                });
+              }
+            }
+
             return;
           }
 
@@ -418,6 +482,7 @@ const chatRoutes: FastifyPluginAsync = async (fastify) => {
             const msg = await prisma.message.findUnique({ where: { id } });
             if (!msg || msg.serverId !== serverId) return;
             if (!(await canReadChannel(userId, serverId, msg.channelId))) return;
+            if (!(await canReactChannel(userId, serverId, msg.channelId))) return;
 
             const existing = await prisma.messageReaction.findUnique({
               where: { messageId_userId_emoji: { messageId: id, userId, emoji } },

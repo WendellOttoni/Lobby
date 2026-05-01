@@ -1,4 +1,4 @@
-import { Dispatch, FormEvent, RefObject, SetStateAction, Suspense, lazy } from "react";
+import { Dispatch, FormEvent, RefObject, SetStateAction, Suspense, lazy, useEffect, useState } from "react";
 import { AttachmentMeta } from "../../lib/api";
 import { Ico } from "../icons";
 import type { ChatMessage } from "../MessageItem";
@@ -34,6 +34,8 @@ interface Props {
 
   notifyTyping: () => void;
   submitMessage: () => void;
+  slowModeUntil?: number | null;
+  onSlowModeExpired?: () => void;
 }
 
 export function MessageInput({
@@ -58,7 +60,25 @@ export function MessageInput({
   setReplyTo,
   notifyTyping,
   submitMessage,
+  slowModeUntil,
+  onSlowModeExpired,
 }: Props) {
+  const [slowSecsLeft, setSlowSecsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!slowModeUntil) { setSlowSecsLeft(0); return; }
+    function tick() {
+      const left = Math.ceil((slowModeUntil! - Date.now()) / 1000);
+      if (left <= 0) { setSlowSecsLeft(0); onSlowModeExpired?.(); }
+      else setSlowSecsLeft(left);
+    }
+    tick();
+    const id = setInterval(tick, 500);
+    return () => clearInterval(id);
+  }, [slowModeUntil]);
+
+  const isSlowed = slowSecsLeft > 0;
+
   function sendForm(e: FormEvent) {
     e.preventDefault();
     submitMessage();
@@ -161,7 +181,7 @@ export function MessageInput({
           <textarea
             ref={inputRef}
             className="chat-input-textarea"
-            placeholder={connected ? `Escreva em #${channelName}…` : "Conectando..."}
+            placeholder={isSlowed ? `Modo lento — aguarde ${slowSecsLeft}s` : connected ? `Escreva em #${channelName}…` : "Conectando..."}
             value={input}
             rows={1}
             onChange={(e) => {
@@ -182,7 +202,7 @@ export function MessageInput({
               }
             }}
             maxLength={2000}
-            disabled={!connected}
+            disabled={!connected || isSlowed}
             autoComplete="off"
           />
           <button
@@ -195,11 +215,11 @@ export function MessageInput({
           </button>
           <button
             type="submit"
-            className={`chat-input-send${hasContent ? " has-content" : ""}`}
-            disabled={!hasContent || !connected}
-            title="Enviar"
+            className={`chat-input-send${hasContent && !isSlowed ? " has-content" : ""}`}
+            disabled={!hasContent || !connected || isSlowed}
+            title={isSlowed ? `Modo lento: ${slowSecsLeft}s` : "Enviar"}
           >
-            <Ico.send />
+            {isSlowed ? <span style={{ fontSize: 11, fontWeight: 700 }}>{slowSecsLeft}s</span> : <Ico.send />}
           </button>
         </form>
         <div className="chat-input-hint">

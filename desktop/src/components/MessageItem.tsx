@@ -1,4 +1,6 @@
-import { ReactNode, Suspense, lazy, memo, useEffect, useState } from "react";
+import React, { Suspense, lazy, memo, useEffect, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { api, AttachmentMeta } from "../lib/api";
 import { Avatar } from "./Avatar";
 import { Ico } from "./icons";
@@ -104,41 +106,59 @@ export function extractMedia(content: string): { url: string; isTenorEmbed: bool
 
 export { URL_RE };
 
-const FORMAT_RE =
-  /```(?:(\w+)\n)?([\s\S]+?)```|`([^`\n]+?)`|\*\*([^*\n]+?)\*\*|_([^_\n]+?)_|(@\w+)/g;
+// Pre-process @mentions to markdown links, skipping content inside code spans/blocks.
+function preprocessMentions(text: string): string {
+  const parts = text.split(/(```[\s\S]*?```|`[^`\n]+?`)/g);
+  return parts
+    .map((part, i) => {
+      if (i % 2 === 1) return part;
+      return part.replace(/(?<![:\w/@])@(everyone|here|\w+)/g, "[@$1](#mention-$1)");
+    })
+    .join("");
+}
 
-function formatMessage(text: string, currentUsername: string): ReactNode[] {
-  const nodes: ReactNode[] = [];
-  let lastIdx = 0;
-  let key = 0;
-  let m: RegExpExecArray | null;
-  FORMAT_RE.lastIndex = 0;
-  while ((m = FORMAT_RE.exec(text)) !== null) {
-    if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
-    if (m[2] !== undefined) {
-      nodes.push(
-        <Suspense key={key++} fallback={<pre className="chat-msg-codeblock"><code>{m[2]}</code></pre>}>
-          <CodeBlock lang={m[1]} code={m[2]} />
-        </Suspense>
-      );
-    } else if (m[3] !== undefined) {
-      nodes.push(<code key={key++} className="chat-msg-code">{m[3]}</code>);
-    } else if (m[4] !== undefined) {
-      nodes.push(<strong key={key++}>{m[4]}</strong>);
-    } else if (m[5] !== undefined) {
-      nodes.push(<em key={key++}>{m[5]}</em>);
-    } else if (m[6] !== undefined) {
-      const isSelf = m[6].slice(1).toLowerCase() === currentUsername.toLowerCase();
-      nodes.push(
-        <span key={key++} className={`chat-mention${isSelf ? " self" : ""}`}>
-          {m[6]}
-        </span>
-      );
-    }
-    lastIdx = m.index + m[0].length;
-  }
-  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
-  return nodes;
+function MarkdownContent({ text, currentUsername }: { text: string; currentUsername: string }) {
+  const processed = preprocessMentions(text);
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        pre({ children }) {
+          const child = React.Children.toArray(children)[0] as React.ReactElement<{
+            className?: string;
+            children?: React.ReactNode;
+          }>;
+          const lang = /language-(\w+)/.exec(child?.props?.className ?? "")?.[1];
+          const code = String(child?.props?.children ?? "").replace(/\n$/, "");
+          return (
+            <Suspense fallback={<pre className="chat-msg-codeblock"><code>{code}</code></pre>}>
+              <CodeBlock lang={lang} code={code} />
+            </Suspense>
+          );
+        },
+        code({ children, className }) {
+          if (className?.startsWith("language-")) return null;
+          return <code className="chat-msg-code">{children}</code>;
+        },
+        a({ href, children }) {
+          if (href?.startsWith("#mention-")) {
+            const tag = href.slice("#mention-".length);
+            if (tag === "everyone" || tag === "here") {
+              return <span className="mention-tag">@{tag}</span>;
+            }
+            const isSelf = tag.toLowerCase() === currentUsername.toLowerCase();
+            return <span className={`chat-mention${isSelf ? " self" : ""}`}>@{tag}</span>;
+          }
+          return <a href={href} target="_blank" rel="noreferrer" className="chat-msg-link">{children}</a>;
+        },
+        p({ children }) {
+          return <>{children}</>;
+        },
+      }}
+    >
+      {processed}
+    </ReactMarkdown>
+  );
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -245,10 +265,10 @@ export const Message = memo(function Message({
           ) : (
             <>
               {!contentIsOnlyUrl && (
-                <p className="chat-msg-content">
-                  {formatMessage(msg.content, currentUsername)}
+                <div className="chat-msg-content">
+                  <MarkdownContent text={msg.content} currentUsername={currentUsername} />
                   {msg.editedAt && <span className="chat-msg-edited"> (editado)</span>}
-                </p>
+                </div>
               )}
               {media && <MediaEmbed url={media.url} />}
               {plainUrl && <LinkPreview url={plainUrl} token={token} />}

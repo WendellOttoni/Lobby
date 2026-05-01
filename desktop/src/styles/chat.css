@@ -203,8 +203,41 @@
   font-size: 14px;
   line-height: 1.55;
   color: var(--text);
-  white-space: pre-wrap;
   word-break: break-word;
+}
+.chat-msg-content p { margin: 0; }
+.chat-msg-content p + p { margin-top: 6px; }
+.chat-msg-content ul,
+.chat-msg-content ol {
+  margin: 4px 0;
+  padding-left: 20px;
+}
+.chat-msg-content li { margin: 2px 0; }
+.chat-msg-content blockquote {
+  margin: 4px 0;
+  padding: 3px 10px;
+  border-left: 3px solid var(--accent);
+  color: var(--text-dim);
+}
+.chat-msg-content del { opacity: 0.55; }
+.chat-msg-content table {
+  border-collapse: collapse;
+  margin: 6px 0;
+  font-size: 13px;
+}
+.chat-msg-content th,
+.chat-msg-content td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+}
+.chat-msg-content th { background: var(--surface-2); font-weight: 600; }
+
+.mention-tag {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 4px;
+  padding: 0 3px;
+  font-weight: 600;
 }
 .chat-msg-edited {
   font-size: 10.5px;

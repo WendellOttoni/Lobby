@@ -6,6 +6,8 @@ export interface User {
   email: string;
   createdAt: string;
   statusText?: string | null;
+  statusEmoji?: string | null;
+  bio?: string | null;
   avatarUrl?: string | null;
 }
 
@@ -16,6 +18,10 @@ export interface TextChannel {
   createdAt: string;
   categoryId?: string | null;
   position?: number;
+  topic?: string | null;
+  slowMode?: number | null;
+  isSystem?: boolean;
+  systemType?: string | null;
   unreadCount?: number;
 }
 
@@ -74,6 +80,7 @@ export interface Room {
   name: string;
   createdAt: string;
   onlineCount: number;
+  maxUsers?: number | null;
   categoryId?: string | null;
   position?: number;
 }
@@ -82,10 +89,22 @@ export interface Member {
   id: string;
   username: string;
   avatarUrl?: string | null;
+  bio?: string | null;
   role: string;
+  roleColor?: string | null;
   online: boolean;
   game: string | null;
+  gameStartedAt?: number | null;
   statusText: string | null;
+  statusEmoji?: string | null;
+}
+
+export interface ServerRole {
+  id: string;
+  serverId: string;
+  name: string;
+  color: string | null;
+  position: number;
 }
 
 export interface ServerBan {
@@ -277,7 +296,15 @@ export const api = {
       token,
     }),
 
-  updateMe: (token: string, data: { username?: string; currentPassword?: string; newPassword?: string; statusText?: string | null; avatarUrl?: string | null }) =>
+  updateMe: (token: string, data: {
+    username?: string;
+    currentPassword?: string;
+    newPassword?: string;
+    statusText?: string | null;
+    statusEmoji?: string | null;
+    bio?: string | null;
+    avatarUrl?: string | null;
+  }) =>
     request<{ user: User }>("/auth/me", {
       method: "PATCH",
       token,
@@ -291,6 +318,32 @@ export const api = {
     request<void>(`/servers/${serverId}/channels/${channelId}/read`, {
       method: "POST",
       token,
+    }),
+
+  getFirstUnread: (token: string, serverId: string, channelId: string) =>
+    request<{ messageId: string | null }>(`/servers/${serverId}/channels/${channelId}/first-unread`, { token }),
+
+  listRoles: (token: string, serverId: string) =>
+    request<{ roles: ServerRole[] }>(`/servers/${serverId}/roles`, { token }),
+
+  updateRole: (token: string, serverId: string, roleName: string, color: string | null) =>
+    request<{ role: ServerRole }>(`/servers/${serverId}/roles/${roleName}`, {
+      method: "PUT",
+      token,
+      body: JSON.stringify({ color }),
+    }),
+
+  updateChannel: (token: string, serverId: string, channelId: string, data: {
+    name?: string;
+    topic?: string | null;
+    slowMode?: number | null;
+    isSystem?: boolean;
+    systemType?: string | null;
+  }) =>
+    request<{ channel: TextChannel }>(`/servers/${serverId}/channels/${channelId}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify(data),
     }),
 
   createChannel: (token: string, serverId: string, name: string) =>
