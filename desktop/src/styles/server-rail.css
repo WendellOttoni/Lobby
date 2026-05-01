@@ -49,9 +49,9 @@
 .server-rail-icon-wrap:hover .server-rail-btn,
 .server-rail-icon-wrap.active .server-rail-btn {
   border-radius: 14px;
-  box-shadow: 0 8px 22px rgba(168, 85, 247, 0.35);
+  box-shadow: 0 4px 16px rgba(41, 151, 255, 0.25);
 }
-.server-rail-btn.brand { background: var(--brand); }
+.server-rail-btn.brand { background: var(--accent); }
 
 .server-rail-copy {
   position: absolute;
@@ -78,7 +78,7 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  background: var(--magenta);
+  background: var(--accent);
   color: white;
   border-radius: 9px;
   font-size: 10px;
@@ -126,8 +126,8 @@
   justify-content: center;
 }
 .server-rail-add:hover {
-  border-color: var(--purple);
-  color: var(--purple);
+  border-color: var(--accent);
+  color: var(--accent);
   border-radius: 14px;
 }
 
@@ -383,7 +383,7 @@
 }
 .server-rail-icon-wrap.active .server-rail-btn.dm-btn,
 .server-rail-btn.dm-btn:hover {
-  color: var(--text);
+  color: #fff;
   background: var(--accent);
 }
 

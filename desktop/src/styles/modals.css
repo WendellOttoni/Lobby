@@ -71,18 +71,17 @@
   outline: none;
   transition: border-color 0.15s;
 }
-.settings-label input:focus { border-color: var(--purple); }
+.settings-label input:focus { border-color: var(--accent); }
 .settings-success { color: var(--good); font-size: 13px; }
 
 .settings-form button[type="submit"] {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  padding: 10px 16px;
-  border-radius: 10px;
-  font-weight: 700;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  font-weight: 600;
   font-size: 14px;
   margin-top: 4px;
-  box-shadow: var(--brand-glow);
 }
 
 .settings-system { display: flex; flex-direction: column; gap: 10px; }
@@ -103,7 +102,7 @@
   font-weight: 600;
   transition: background 0.12s, color 0.12s;
 }
-.settings-toggle.on { background: var(--brand); color: white; }
+.settings-toggle.on { background: var(--accent); color: white; }
 
 .settings-ptt-desc { font-size: 12.5px; color: var(--text-dim); }
 .settings-ptt-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -186,16 +185,15 @@
   font-size: 14px;
   outline: none;
 }
-.server-modal-form input:focus { border-color: var(--purple); }
+.server-modal-form input:focus { border-color: var(--accent); }
 .server-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 .server-modal-actions button[type="submit"] {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  padding: 9px 16px;
-  border-radius: 10px;
-  font-weight: 700;
+  padding: 9px 20px;
+  border-radius: 9999px;
+  font-weight: 600;
   font-size: 13px;
-  box-shadow: var(--brand-glow);
 }
 
 /* ============================================
@@ -246,7 +244,7 @@
 .ctx-menu-row-header { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
 .ctx-menu-row-header span { color: var(--text-dim); }
 .ctx-menu-vol-value { color: var(--text) !important; font-weight: 600; }
-.ctx-menu-row input[type="range"] { width: 100%; accent-color: var(--purple); cursor: pointer; }
+.ctx-menu-row input[type="range"] { width: 100%; accent-color: var(--accent); cursor: pointer; }
 .ctx-menu-actions {
   display: flex;
   gap: 6px;

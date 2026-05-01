@@ -66,7 +66,7 @@ export function VoiceBar() {
             <span className="now-playing-rtt">{rtt}ms</span>
           )}
         </div>
-        <WaveBars live={isConnected && !isMuted} color="var(--cyan)" count={5} />
+        <WaveBars live={isConnected && !isMuted} color="var(--accent)" count={5} />
       </div>
       <div className="now-playing-actions">
         <button

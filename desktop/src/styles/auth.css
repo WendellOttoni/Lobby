@@ -39,15 +39,14 @@
   font-size: 14px;
   transition: border-color 0.15s;
 }
-.auth-card input:focus { outline: none; border-color: var(--purple); }
+.auth-card input:focus { outline: none; border-color: var(--accent); }
 .auth-card .btn-primary {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  border-radius: 10px;
+  border-radius: 9999px;
   padding: 10px 14px;
-  font-weight: 700;
+  font-weight: 600;
   font-size: 14px;
-  box-shadow: var(--brand-glow);
   margin-top: 6px;
 }
 .auth-card .auth-footer { margin-top: 18px; text-align: center; font-size: 13px; color: var(--text-dim); }

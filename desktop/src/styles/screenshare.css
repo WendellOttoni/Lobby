@@ -88,7 +88,7 @@
   transition: border-color 0.15s;
   background: #000;
 }
-.sstv-thumb:hover { border-color: var(--accent, #7c5cbf); }
+.sstv-thumb:hover { border-color: var(--accent); }
 
 .sstv-thumb-video {
   position: relative;

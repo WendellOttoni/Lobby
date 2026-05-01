@@ -91,12 +91,11 @@
 }
 .no-servers p { color: var(--text-dim); margin-bottom: 16px; }
 .no-servers button {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  padding: 10px 18px;
-  border-radius: 10px;
-  font-weight: 700;
-  box-shadow: var(--brand-glow);
+  padding: 10px 22px;
+  border-radius: 9999px;
+  font-weight: 600;
 }
 
 .server-loading { flex: 1; display: grid; place-items: center; color: var(--text-dim); font-size: 13px; }
@@ -119,13 +118,12 @@
 .error-boundary-card pre { background: var(--bg); padding: 10px; border-radius: 8px; overflow: auto; font-size: 11px; }
 .error-boundary-actions { display: flex; gap: 10px; flex-wrap: wrap; }
 .error-boundary-card button {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  padding: 9px 18px;
-  border-radius: 10px;
-  font-weight: 700;
+  padding: 9px 20px;
+  border-radius: 9999px;
+  font-weight: 600;
   font-size: 13px;
-  box-shadow: var(--brand-glow);
 }
 
 /* ============================================
@@ -179,7 +177,7 @@
   align-self: flex-start;
 }
 .invite-box-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.invite-box-confirm { font-size: 11px; font-weight: 600; color: var(--cyan); }
+.invite-box-confirm { font-size: 11px; font-weight: 600; color: var(--accent); }
 
 /* Reply / quote */
 .chat-reply-bar {
@@ -349,7 +347,7 @@
   min-width: 18px;
   height: 16px;
   padding: 0 5px;
-  background: var(--magenta);
+  background: var(--accent);
   color: white;
   border-radius: 8px;
   font-size: 10px;
@@ -399,10 +397,10 @@
 .server-view-tab:hover { color: var(--text); }
 .server-view-tab.active {
   color: var(--text);
-  border-bottom-color: var(--accent, #7c5cbf);
+  border-bottom-color: var(--accent);
 }
 .server-view-tab-badge {
-  background: var(--accent, #7c5cbf);
+  background: var(--accent);
   color: #fff;
   font-size: 10px;
   padding: 1px 5px;

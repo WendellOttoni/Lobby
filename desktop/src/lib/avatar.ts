@@ -1,14 +1,14 @@
-const AVATAR_GRADIENTS: [string, string][] = [
-  ["#5865f2", "#7c6ef5"],
-  ["#3ba55d", "#4fc47a"],
-  ["#faa61a", "#fbbe52"],
-  ["#ed4245", "#f16568"],
-  ["#00b0f4", "#39c6ff"],
-  ["#a660e8", "#c184f0"],
-  ["#f47b67", "#f89e8e"],
-  ["#06b6d4", "#22d3ee"],
-  ["#ec4899", "#f472b6"],
-  ["#8b5cf6", "#a78bfa"],
+const AVATAR_COLORS: [string, string][] = [
+  ["#0a84ff", "#2997ff"],
+  ["#30d158", "#34c759"],
+  ["#ff9f0a", "#ffcc00"],
+  ["#ff453a", "#ff6961"],
+  ["#5ac8fa", "#32ade6"],
+  ["#bf5af2", "#9b59b6"],
+  ["#ff6b6b", "#ee5a52"],
+  ["#64d2ff", "#5ac8fa"],
+  ["#ff375f", "#ff2d55"],
+  ["#6c6c70", "#8e8e93"],
 ];
 
 function hashId(id: string): number {
@@ -18,7 +18,7 @@ function hashId(id: string): number {
 }
 
 export function avatarBg(id: string): string {
-  const [a, b] = AVATAR_GRADIENTS[hashId(id) % AVATAR_GRADIENTS.length];
+  const [a, b] = AVATAR_COLORS[hashId(id) % AVATAR_COLORS.length];
   return `linear-gradient(135deg, ${a} 0%, ${b} 100%)`;
 }
 

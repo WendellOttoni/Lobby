@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--cyan);
+  color: var(--accent);
   flex-shrink: 0;
 }
 .chat-header-title { min-width: 0; }
@@ -98,15 +98,15 @@
   bottom: 14px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--purple);
+  background: var(--accent);
   color: #fff;
   border: none;
-  border-radius: 20px;
+  border-radius: 9999px;
   padding: 6px 18px;
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.45);
+  box-shadow: var(--accent-glow);
   white-space: nowrap;
   transition: opacity 0.15s, transform 0.15s;
   z-index: 10;
@@ -118,12 +118,12 @@
   width: 64px;
   height: 64px;
   border-radius: 18px;
-  background: var(--brand);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   margin-bottom: 14px;
-  box-shadow: 0 12px 32px rgba(168, 85, 247, 0.3);
+  box-shadow: var(--accent-glow);
   color: white;
 }
 .chat-intro h2 {
@@ -537,14 +537,14 @@
   top: 0;
   bottom: 0;
   width: 4px;
-  background: var(--brand);
+  background: var(--accent);
 }
 .invite-embed-tile {
   width: 36px;
   height: 36px;
   border-radius: 10px;
   margin-left: 6px;
-  background: var(--brand);
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -567,12 +567,12 @@
   font-family: var(--mono);
 }
 .invite-embed-btn {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  border-radius: 10px;
-  padding: 7px 14px;
+  border-radius: 9999px;
+  padding: 7px 16px;
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   flex-shrink: 0;
   margin-left: 6px;
 }
@@ -601,8 +601,8 @@
   transition: border-color 0.15s, box-shadow 0.15s;
 }
 .chat-input-shell:focus-within {
-  border-color: var(--purple);
-  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.12);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(41, 151, 255, 0.15);
 }
 .chat-input-shell input,
 .chat-input-shell textarea {
@@ -647,9 +647,9 @@
   cursor: default;
 }
 .chat-input-send.has-content {
-  background: var(--brand);
+  background: var(--accent);
   color: white;
-  box-shadow: 0 4px 14px rgba(168, 85, 247, 0.4);
+  box-shadow: var(--accent-glow);
   cursor: pointer;
 }
 .chat-input-hint {

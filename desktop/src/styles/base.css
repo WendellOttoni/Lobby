@@ -1,36 +1,34 @@
 :root {
   --titlebar-h: 32px;
 
-  /* surfaces — warm dark, not cold gray */
-  --bg:            #0e0b14;
-  --bg-2:          #120f1a;
-  --surface:       #191523;
-  --surface-2:     #221c31;
-  --surface-3:     #2a2340;
-  --border:        #2a2338;
-  --border-subtle: #1f1a2b;
+  /* surfaces — Apple dark */
+  --bg:            #0a0a0a;
+  --bg-2:          #1c1c1e;
+  --surface:       #272729;
+  --surface-2:     #2a2a2c;
+  --surface-3:     #3a3a3c;
+  --border:        rgba(255, 255, 255, 0.10);
+  --border-subtle: rgba(255, 255, 255, 0.06);
 
   /* text */
-  --text:       #f2eef9;
-  --text-dim:   #8e86a5;
-  --text-muted: #565072;
+  --text:       #ffffff;
+  --text-dim:   rgba(255, 255, 255, 0.55);
+  --text-muted: rgba(255, 255, 255, 0.28);
 
-  /* brand — the logo gradient */
-  --cyan:    #22d3ee;
-  --purple:  #a78bfa;
-  --magenta: #e040fb;
-  --brand:   linear-gradient(135deg, #22d3ee 0%, #a78bfa 45%, #e040fb 100%);
-  --brand-glow: 0 8px 28px rgba(168, 85, 247, 0.35);
+  /* brand — single blue accent */
+  --accent:      #2997ff;
+  --accent-dim:  rgba(41, 151, 255, 0.15);
+  --accent-glow: 0 4px 14px rgba(41, 151, 255, 0.30);
 
   /* semantic */
-  --good:   #4ade80;
-  --warn:   #fbbf24;
-  --danger: #fb7185;
+  --good:   #30d158;
+  --warn:   #ff9f0a;
+  --danger: #ff453a;
 
   /* type */
-  --font:    'Inter', system-ui, sans-serif;
-  --display: 'Bricolage Grotesque', 'Inter', system-ui, sans-serif;
-  --mono:    'JetBrains Mono', monospace;
+  --font:    'Inter', system-ui, -apple-system, sans-serif;
+  --display: 'Inter', system-ui, -apple-system, sans-serif;
+  --mono:    ui-monospace, 'JetBrains Mono', 'SFMono-Regular', Consolas, monospace;
 
   font-family: var(--font);
   color-scheme: dark;
@@ -50,29 +48,20 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background:
-    radial-gradient(ellipse 50% 40% at 10% 0%, rgba(34, 211, 238, 0.06) 0%, transparent 60%),
-    radial-gradient(ellipse 40% 30% at 90% 100%, rgba(224, 64, 251, 0.07) 0%, transparent 60%),
-    var(--bg);
-}
-
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
-::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
 
 button { font-family: var(--font); cursor: pointer; border: none; background: transparent; color: inherit; }
-button:disabled { cursor: not-allowed; opacity: 0.5; }
+button:disabled { cursor: not-allowed; opacity: 0.4; }
 input, select, textarea { font-family: var(--font); }
-a { color: var(--purple); text-decoration: none; }
+a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 .brand-text {
-  background: var(--brand);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .error {
@@ -84,4 +73,3 @@ a:hover { text-decoration: underline; }
 @keyframes pulse-soft { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 @keyframes wave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 @keyframes float-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
-

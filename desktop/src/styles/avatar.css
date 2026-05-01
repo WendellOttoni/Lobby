@@ -22,9 +22,9 @@
 .avatar.muted .avatar-inner { opacity: 0.55; filter: grayscale(0.4); }
 .avatar-ring {
   position: absolute;
-  inset: -4px;
+  inset: -3px;
   border-radius: 50%;
-  background: conic-gradient(from 0deg, #22d3ee, #a78bfa, #e040fb, #22d3ee);
+  border: 2.5px solid #2997ff;
   opacity: 0.9;
   animation: pulse-soft 1.4s ease infinite;
 }

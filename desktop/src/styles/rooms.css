@@ -61,7 +61,7 @@
   border: 1px solid transparent;
   transition: border-color 0.15s;
 }
-.rooms-search-box:focus-within { border-color: var(--purple); }
+.rooms-search-box:focus-within { border-color: var(--accent); }
 .rooms-search-box input {
   flex: 1;
   background: none;
@@ -133,7 +133,7 @@
   outline: none;
   transition: border-color 0.15s;
 }
-.rooms-new-room input:focus { border-color: var(--purple); }
+.rooms-new-room input:focus { border-color: var(--accent); }
 .rooms-new-room button {
   background: var(--surface);
   color: var(--text-dim);
@@ -165,7 +165,7 @@
   top: 6px;
   bottom: 6px;
   width: 3px;
-  background: var(--brand);
+  background: var(--accent);
   border-radius: 0 3px 3px 0;
 }
 .channel-row-head {
@@ -179,7 +179,7 @@
   align-items: center;
 }
 .channel-row:hover .channel-row-icon { color: var(--text); }
-.channel-row.active .channel-row-icon { color: var(--cyan); }
+.channel-row.active .channel-row-icon { color: var(--accent); }
 .channel-row-name {
   flex: 1;
   font-size: 14px;
@@ -200,7 +200,7 @@
   height: 18px;
   padding: 0 6px;
   border-radius: 9px;
-  background: var(--magenta);
+  background: var(--accent);
   color: white;
   font-size: 10px;
   font-weight: 700;
@@ -215,8 +215,8 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  background: rgba(167, 139, 250, 0.15);
-  color: var(--purple);
+  background: var(--accent-dim);
+  color: var(--accent);
   padding: 3px 8px;
   border-radius: 8px;
 }

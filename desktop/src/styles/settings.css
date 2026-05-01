@@ -124,7 +124,7 @@
   gap: 12px;
   color: var(--text-dim);
 }
-.settings-volume-row input[type="range"] { flex: 1; accent-color: var(--purple); cursor: pointer; }
+.settings-volume-row input[type="range"] { flex: 1; accent-color: var(--accent); cursor: pointer; }
 .settings-volume-value { font-size: 13px; font-weight: 600; color: var(--text); min-width: 36px; text-align: right; }
 
 /* Toggles */
@@ -151,10 +151,9 @@
 .settings-about-wordmark {
   font-family: var(--display);
   font-size: 28px;
-  font-weight: 900;
-  background: var(--brand);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+  color: var(--accent);
+  letter-spacing: -0.02em;
 }
 .settings-about-version { font-size: 13px; color: var(--text-muted); font-family: var(--mono); }
 .settings-about-stack {
